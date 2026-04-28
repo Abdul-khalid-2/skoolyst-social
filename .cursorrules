@@ -1,0 +1,130 @@
+## TASK: Convert React Frontend → Laravel Blade (Full Stack)
+
+### PROJECT CONTEXT
+This is "Skoolyst Social AI" — a Social Media Management SaaS.
+Currently: React (Vite + TypeScript + TailwindCSS) frontend + Laravel API backend (separate).
+Goal: Eliminate React entirely. Rebuild the entire UI as Laravel Blade views served by Laravel web routes, using the same TailwindCSS classes already in the React components.
+
+### CURRENT REACT PAGES TO CONVERT (1:1 mapping)
+Each React page/component → equivalent Blade view:
+
+| React File                          | Laravel Route & Blade View                     |
+|-------------------------------------|------------------------------------------------|
+| LoginPage.tsx                       | GET /login → auth/login.blade.php              |
+| RegisterPage.tsx                    | GET /register → auth/register.blade.php        |
+| DashboardPage.tsx                   | GET /dashboard → dashboard.blade.php           |
+| CreatePostPage.tsx                  | GET /create → posts/create.blade.php           |
+| PostsPage.tsx                       | GET /posts → posts/index.blade.php             |
+| ScheduledPostsPage.tsx              | GET /scheduled → posts/scheduled.blade.php     |
+| AccountsPage.tsx                    | GET /accounts → accounts/index.blade.php       |
+| AnalyticsPage.tsx                   | GET /analytics → analytics/index.blade.php     |
+| SettingsPage.tsx                    | GET /settings → settings/index.blade.php       |
+| ProfilePage.tsx                     | GET /profile → profile/index.blade.php         |
+| SwitchAccountPage.tsx               | GET /switch-account → workspaces/switch.blade.php |
+| NotificationsPage.tsx               | GET /notifications → notifications/index.blade.php |
+| ActivityPage.tsx                    | GET /activity → activity/index.blade.php       |
+| Sidebar.tsx                         | components/sidebar.blade.php                   |
+| TopBar.tsx                          | components/topbar.blade.php                    |
+| StatCard.tsx                        | components/stat-card.blade.php                 |
+| Toast/ToastContainer.tsx            | components/toast.blade.php (Alpine.js)         |
+| PostComposer.tsx                    | components/post-composer.blade.php             |
+| RevenueChart.tsx                    | components/revenue-chart.blade.php (Chart.js)  |
+
+### EXISTING BACKEND (DO NOT CHANGE API ROUTES)
+These Laravel API routes already exist and work. Keep them exactly as-is:
+- POST /api/login, /api/register, /api/logout
+- GET /api/user, PUT /api/user/profile, PUT /api/user/password
+- GET/POST/PATCH/DELETE /api/workspaces/{workspace}/posts
+- GET /api/workspaces/{workspace}/social-accounts
+- GET /api/workspaces/{workspace}/social-platforms
+- POST /api/workspaces/{workspace}/social-platforms/{slug}/connect
+- POST /api/posts/publish
+- GET /api/auth/facebook/redirect, /api/auth/facebook/callback
+
+### TECH STACK FOR BLADE CONVERSION
+- TailwindCSS (same classes from React — copy them directly)
+- Alpine.js (replaces React state/hooks — for dropdowns, modals, toggles)
+- Laravel Livewire (optional, only for highly interactive components like PostComposer and PostsPage filters)
+- Axios or fetch() via <script> tags for AJAX calls that still need API (e.g. publish post)
+- Chart.js via CDN for RevenueChart
+- Vite (already configured in Laravel) for CSS/JS bundling
+- Laravel Sanctum for session-based auth (switch from token to cookie/session auth)
+
+### ARCHITECTURE RULES (from .cursorrules)
+- Controllers: HTTP only — validate, call service, return view. NO business logic.
+- Services: All business logic (already exists: SocialPostService, SocialAccountProvisioner).
+- FormRequests: All validation (already exists: StorePostRequest).
+- Blade Components: Build <x-button>, <x-card>, <x-alert>, <x-input>, <x-badge>, <x-modal>, <x-stat-card>, <x-sidebar>, <x-topbar>, <x-page-header>. Use them EVERYWHERE — no raw HTML buttons or cards in page views.
+- Models: Already exist (Post, SocialAccount, Workspace, User, etc.) — do not modify.
+
+### LAYOUT STRUCTURE
+
+
+resources/views/
+├── layouts/
+│   └── app.blade.php          # Main shell: sidebar + topbar + <main> slot
+├── components/
+│   ├── sidebar.blade.php
+│   ├── topbar.blade.php
+│   ├── stat-card.blade.php
+│   ├── post-composer.blade.php
+│   ├── revenue-chart.blade.php
+│   ├── toast.blade.php
+│   ├── button.blade.php
+│   ├── card.blade.php
+│   ├── badge.blade.php
+│   ├── modal.blade.php
+│   └── input.blade.php
+├── auth/
+│   ├── login.blade.php
+│   └── register.blade.php
+├── dashboard.blade.php
+├── posts/
+│   ├── index.blade.php
+│   ├── create.blade.php
+│   └── scheduled.blade.php
+├── accounts/
+│   └── index.blade.php
+├── analytics/
+│   └── index.blade.php
+├── settings/
+│   └── index.blade.php
+├── profile/
+│   └── index.blade.php
+├── workspaces/
+│   └── switch.blade.php
+├── notifications/
+│   └── index.blade.php
+└── activity/
+└── index.blade.php
+
+
+### AUTH CHANGE (important)
+React used Bearer tokens (localStorage). Laravel Blade will use:
+- `Auth::attempt()` for login → session-based
+- `@auth` / `@guest` directives for route protection
+- Middleware `auth` on all protected web routes
+- Keep API routes as-is for any remaining AJAX needs
+
+### COPY UI EXACTLY
+- Copy TailwindCSS class names from React TSX files directly into Blade.
+- Colors, spacing, grid layouts, responsive breakpoints — replicate exactly.
+- Sidebar collapsed state → Alpine.js `x-data="{ collapsed: false }"`.
+- Toast notifications → Alpine.js with `x-show` and auto-dismiss timer.
+- Modals → Alpine.js `x-data="{ open: false }"`.
+
+### WHAT TO BUILD FIRST (priority order)
+1. layouts/app.blade.php + components/sidebar + components/topbar
+2. auth/login + auth/register + AuthController (web, session-based)
+3. dashboard.blade.php + DashboardController
+4. posts/create.blade.php + PostComposer component
+5. posts/index + posts/scheduled
+6. accounts/index
+7. Remaining pages (analytics, settings, profile, notifications, activity)
+
+### DO NOT
+- Do not create new API endpoints. Existing ones are fine.
+- Do not modify existing Models, Migrations, or Services.
+- Do not use React, Vue, or any JS framework — Alpine.js only.
+- Do not inline business logic in controllers.
+- Do not use `$request->validate()` inline — use FormRequests.
