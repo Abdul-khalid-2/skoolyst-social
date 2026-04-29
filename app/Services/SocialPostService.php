@@ -44,7 +44,7 @@ class SocialPostService
         }
     }
 
-    public function postToFacebookAccount(SocialAccount $account, string $message, ?string $link = null): array
+    public function postToFacebookAccount(SocialAccount $account, string $message, ?string $link = null, ?string $mediaUrl = null, ?string $mediaType = null): array
     {
         $pageId = (string) ($account->platform_page_id ?: $account->account_handle);
         $token = $this->resolveToken((string) $account->access_token);
@@ -53,37 +53,85 @@ class SocialPostService
             return ['success' => false, 'error' => 'Facebook Page credentials are missing for this workspace.'];
         }
 
-        return $this->postToFacebookPage($pageId, $token, $message, $link);
+        return $this->postToFacebookPage($pageId, $token, $message, $link, $mediaUrl, $mediaType);
     }
 
-    private function postToFacebookPage(string $pageId, string $token, string $message, ?string $link = null): array
+    private function postToFacebookPage(string $pageId, string $token, string $message, ?string $link = null, ?string $mediaUrl = null, ?string $mediaType = null): array
     {
         $version = (string) env('META_API_VERSION', config('services.facebook.graph_version', 'v24.0'));
-        $client = new Client(['base_uri' => "https://graph.facebook.com/{$version}/", 'timeout' => 20]);
-        $form = [
-            'message' => $message,
-            'access_token' => $token,
-        ];
-        if ($link) {
-            $form['link'] = $link;
+        $client = new Client(['base_uri' => "https://graph.facebook.com/{$version}/", 'timeout' => 30]);
+        
+        $endpoint = "{$pageId}/feed";
+        $options = [];
+
+        if ($mediaUrl) {
+            // We need to upload the file directly because Ngrok blocks Facebook from downloading it via URL
+            $path = str_replace(url('/storage'), storage_path('app/public'), $mediaUrl);
+            
+            if (file_exists($path)) {
+                if ($mediaType === 'video') {
+                    $endpoint = "{$pageId}/videos";
+                    $options['multipart'] = [
+                        ['name' => 'access_token', 'contents' => $token],
+                        ['name' => 'description', 'contents' => $message],
+                        [
+                            'name' => 'source',
+                            'contents' => fopen($path, 'r'),
+                            'filename' => basename($path)
+                        ],
+                    ];
+                } else {
+                    $endpoint = "{$pageId}/photos";
+                    $options['multipart'] = [
+                        ['name' => 'access_token', 'contents' => $token],
+                        ['name' => 'caption', 'contents' => $message],
+                        [
+                            'name' => 'source',
+                            'contents' => fopen($path, 'r'),
+                            'filename' => basename($path)
+                        ],
+                    ];
+                }
+            } else {
+                return ['success' => false, 'error' => 'Media file not found on server.'];
+            }
+        } else {
+            $form = [
+                'message' => $message,
+                'access_token' => $token,
+            ];
+            if ($link) {
+                $form['link'] = $link;
+            }
+            $options['form_params'] = $form;
         }
 
         try {
-            $res = $client->post("{$pageId}/feed", ['form_params' => $form]);
+            $res = $client->post($endpoint, $options);
             $json = json_decode((string) $res->getBody(), true);
 
             if (! is_array($json) || ! isset($json['id'])) {
                 return ['success' => false, 'error' => 'Facebook response missing post id.'];
             }
 
-            return ['success' => true, 'post_id' => (string) $json['id']];
+            // For photos, Facebook sometimes returns post_id. If not, we use the photo id.
+            $postId = $json['post_id'] ?? $json['id'];
+
+            return ['success' => true, 'post_id' => (string) $postId];
         } catch (GuzzleException $e) {
+            $errorMsg = $e->getMessage();
+            if (method_exists($e, 'hasResponse') && $e->hasResponse()) {
+                $errorMsg = (string) $e->getResponse()->getBody();
+            }
+            
             Log::error('Facebook workspace publish failed', [
-                'error' => $e->getMessage(),
+                'error' => $errorMsg,
                 'page_id' => $pageId,
+                'endpoint' => $endpoint,
+                'media_url' => $mediaUrl
             ]);
 
-            return ['success' => false, 'error' => $e->getMessage()];
+            return ['success' => false, 'error' => $errorMsg];
         }
     }
 

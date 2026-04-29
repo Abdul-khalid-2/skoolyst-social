@@ -21,6 +21,7 @@ class SocialAccount extends Model
         'token_expires_at',
         'scopes',
         'followers_count',
+        'fan_count',
         'is_connected',
         'meta',
     ];
@@ -31,6 +32,8 @@ class SocialAccount extends Model
             'token_expires_at' => 'datetime',
             'scopes' => 'array',
             'meta' => 'array',
+            'followers_count' => 'integer',
+            'fan_count' => 'integer',
             'is_connected' => 'boolean',
         ];
     }

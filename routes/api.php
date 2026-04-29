@@ -20,7 +20,7 @@ Route::middleware(['web', 'throttle:20,1'])->group(function () {
     Route::get('/auth/facebook/callback', [FacebookAuthController::class, 'handleCallback']);
 });
 
-Route::middleware(['auth:sanctum', 'workspace.context', 'throttle:60,1'])->group(function () {
+Route::middleware(['web', 'auth', 'workspace.context', 'throttle:60,1'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
     Route::put('/user/profile', [AuthController::class, 'updateProfile']);

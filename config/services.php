@@ -42,6 +42,7 @@ return [
         'app_secret' => env('FACEBOOK_APP_SECRET'),
         'redirect' => env('FACEBOOK_REDIRECT_URI', rtrim((string) env('APP_URL', 'http://localhost'), '/').'/api/auth/facebook/callback'),
         'graph_version' => env('FACEBOOK_GRAPH_VERSION', 'v24.0'),
+        'fetch_business_pages' => (bool) env('FACEBOOK_FETCH_BUSINESS_PAGES', true),
     ],
 
 ];

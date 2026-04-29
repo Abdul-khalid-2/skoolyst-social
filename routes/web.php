@@ -7,6 +7,8 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PostsController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SettingsController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -38,5 +40,14 @@ Route::middleware(['auth', 'workspace.context'])->group(function (): void {
     Route::put('profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
     Route::view('switch-account', 'workspaces.switch');
     Route::view('notifications', 'notifications.index');
-    Route::view('activity', 'activity.index');
+    Route::get('activity', [\App\Http\Controllers\ActivityController::class, 'index'])->name('activity');
 });
+
+// Temporary testing route: allows logout via direct URL hit.
+Route::get('logout', function (Request $request): \Illuminate\Http\RedirectResponse {
+    Auth::logout();
+    $request->session()->invalidate();
+    $request->session()->regenerateToken();
+
+    return redirect()->route('login');
+})->name('logout.get');

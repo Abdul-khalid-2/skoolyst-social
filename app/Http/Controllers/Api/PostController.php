@@ -212,25 +212,38 @@ class PostController extends Controller
     {
         foreach ($slugs as $slug) {
             $platform = SocialPlatform::query()->where('slug', $slug)->firstOrFail();
-            $account = $this->connectedAccountForPlatform($workspace, $platform);
-            if (! $account) {
+            
+            // Get all connected accounts for this platform in this workspace
+            $accounts = SocialAccount::query()
+                ->where('workspace_id', $workspace->id)
+                ->where('social_platform_id', $platform->id)
+                ->where('is_connected', true)
+                ->get();
+
+            if ($accounts->isEmpty()) {
                 throw ValidationException::withMessages([
                     'platform_slugs' => [__('No connected :platform account. Add or connect the account in Accounts (Settings) first.', ['platform' => $platform->name])],
                 ]);
             }
 
-            PostTarget::query()->create([
-                'post_id' => $post->id,
-                'social_account_id' => $account->id,
-                'social_platform_id' => $platform->id,
-                'status' => 'pending',
-            ]);
+            foreach ($accounts as $account) {
+                PostTarget::query()->create([
+                    'post_id' => $post->id,
+                    'social_account_id' => $account->id,
+                    'social_platform_id' => $platform->id,
+                    'status' => 'pending',
+                ]);
+            }
         }
     }
 
     private function publishPostTargets(Post $post): void
     {
-        $post->load(['postTargets.socialPlatform', 'postTargets.socialAccount']);
+        $post->load(['postTargets.socialPlatform', 'postTargets.socialAccount', 'postMedia']);
+
+        $media = $post->postMedia->first();
+        $mediaUrl = $media ? $media->url : null;
+        $mediaType = $media ? $media->type : null;
 
         $published = 0;
         $failed = 0;
@@ -256,7 +269,13 @@ class PostController extends Controller
             }
 
             $target->update(['status' => 'publishing', 'error_message' => null]);
-            $result = $this->socialPostService->postToFacebookAccount($target->socialAccount, $post->caption);
+            $result = $this->socialPostService->postToFacebookAccount(
+                $target->socialAccount, 
+                $post->caption, 
+                null, 
+                $mediaUrl, 
+                $mediaType
+            );
 
             if (($result['success'] ?? false) === true) {
                 $published++;

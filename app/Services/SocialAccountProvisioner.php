@@ -6,9 +6,19 @@ use App\Models\SocialAccount;
 use App\Models\SocialPlatform;
 use App\Models\Workspace;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class SocialAccountProvisioner
 {
+    private const FACEBOOK_PAGE_FIELDS = 'id,name,access_token,fan_count,followers_count,picture';
+
+    public static function ensureForWorkspace(Workspace $workspace): void
+    {
+        // Compatibility no-op: workspace routes call this hook before listing/connecting.
+        // Facebook pages are provisioned during OAuth callback.
+    }
+
     public static function connectFacebookOnlyForWorkspace(
         Workspace $workspace,
         string $facebookUserId,
@@ -33,7 +43,7 @@ class SocialAccountProvisioner
             [
                 'platform_user_id' => $facebookUserId,
                 'account_name' => $accountName ?: 'Facebook',
-                'access_token' => $accessToken,
+                'access_token' => encrypt($accessToken),
                 'token_expires_at' => $expiresAt,
                 'is_connected' => true,
             ],
@@ -56,82 +66,238 @@ class SocialAccountProvisioner
         }
 
         $graphVersion = (string) config('services.facebook.graph_version', 'v24.0');
-        $res = Http::timeout(20)->get("https://graph.facebook.com/{$graphVersion}/me/accounts", [
-            'fields' => 'id,name,access_token,picture',
-            'access_token' => $userAccessToken,
-        ]);
-
-        if (! $res->successful()) {
-            return 0;
-        }
-
-        $pages = $res->json('data');
-        if (! is_array($pages)) {
+        $pagesById = self::fetchPagesForUser($graphVersion, $userAccessToken);
+        if ($pagesById === []) {
             return 0;
         }
 
         $connected = 0;
-        $after = null;
-
-        do {
-            foreach ($pages as $page) {
-                if (! is_array($page)) {
-                    continue;
-                }
-
-                $pageId = (string) ($page['id'] ?? '');
-                $pageToken = (string) ($page['access_token'] ?? '');
-                if ($pageId === '' || $pageToken === '') {
-                    continue;
-                }
-
-                SocialAccount::query()->updateOrCreate(
-                    [
-                        'workspace_id' => $workspace->id,
-                        'social_platform_id' => $facebook->id,
-                        'platform_page_id' => $pageId,
-                    ],
-                    [
-                        'platform_user_id' => $facebookUserId,
-                        'account_name' => (string) ($page['name'] ?? 'Facebook Page'),
-                        'account_handle' => $pageId,
-                        'avatar' => self::shortUrl($page['picture']['data']['url'] ?? null),
-                        'access_token' => encrypt($pageToken),
-                        'token_expires_at' => $expiresAt,
-                        'is_connected' => true,
-                    ],
-                );
-
-                $connected++;
+        foreach ($pagesById as $page) {
+            if (! is_array($page)) {
+                continue;
             }
 
-            $next = $res->json('paging.cursors.after');
-            $next = is_string($next) && $next !== '' ? $next : null;
-            if ($next === null) {
-                $pages = [];
-                $after = null;
-                break;
+            $pageId = (string) ($page['id'] ?? '');
+            $pageToken = (string) ($page['access_token'] ?? '');
+            if ($pageId === '' || $pageToken === '') {
+                continue;
             }
 
-            $after = $next;
-            $res = Http::timeout(20)->get("https://graph.facebook.com/{$graphVersion}/me/accounts", [
-                'fields' => 'id,name,access_token,picture',
-                'access_token' => $userAccessToken,
-                'limit' => 25,
-                'after' => $after,
-            ]);
+            SocialAccount::query()->updateOrCreate(
+                [
+                    'workspace_id' => $workspace->id,
+                    'social_platform_id' => $facebook->id,
+                    'platform_page_id' => $pageId,
+                ],
+                [
+                    'platform_user_id' => $facebookUserId,
+                    'account_name' => (string) ($page['name'] ?? 'Facebook Page'),
+                    'account_handle' => $pageId,
+                    'avatar' => self::shortUrl($page['picture']['data']['url'] ?? null),
+                    'access_token' => encrypt($pageToken),
+                    'token_expires_at' => $expiresAt,
+                    'followers_count' => (int) ($page['followers_count'] ?? 0),
+                    'fan_count' => (int) ($page['fan_count'] ?? 0),
+                    'is_connected' => true,
+                ],
+            );
 
-            if (! $res->successful()) {
-                break;
-            }
-
-            $pages = $res->json('data');
-            if (! is_array($pages)) {
-                $pages = [];
-            }
-        } while (count($pages) > 0);
+            $connected++;
+        }
 
         return $connected;
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    private static function fetchPagesForUser(string $graphVersion, string $userAccessToken): array
+    {
+        $pagesById = [];
+
+        // 1) Directly managed pages from /me/accounts
+        $accountPages = self::fetchPagedGraphCollection(
+            "https://graph.facebook.com/{$graphVersion}/me/accounts",
+            [
+                'fields' => self::FACEBOOK_PAGE_FIELDS,
+                'access_token' => $userAccessToken,
+                'limit' => 100,
+            ]
+        );
+        foreach ($accountPages as $page) {
+            if (! is_array($page)) {
+                continue;
+            }
+            $pageId = (string) ($page['id'] ?? '');
+            if ($pageId === '') {
+                continue;
+            }
+            $pagesById[$pageId] = $page;
+        }
+        Log::info('Facebook /me/accounts response', [
+            'count' => count($accountPages),
+            'page_ids' => array_keys($pagesById),
+        ]);
+
+        // 2) Optional business portfolios and their owned pages
+        $fetchBusinessPages = (bool) config('services.facebook.fetch_business_pages', true);
+        $businesses = [];
+        if ($fetchBusinessPages) {
+            $businesses = self::fetchBusinessesSafely($graphVersion, $userAccessToken);
+        }
+        Log::info('Facebook /me/businesses response', [
+            'count' => count($businesses),
+            'businesses' => array_map(
+                fn ($b) => ['id' => (is_array($b) ? ($b['id'] ?? null) : null), 'name' => (is_array($b) ? ($b['name'] ?? null) : null)],
+                $businesses
+            ),
+        ]);
+        foreach ($businesses as $business) {
+            if (! is_array($business)) {
+                continue;
+            }
+            $businessId = (string) ($business['id'] ?? '');
+            if ($businessId === '') {
+                continue;
+            }
+
+            $ownedPages = self::fetchPagedGraphCollection(
+                "https://graph.facebook.com/{$graphVersion}/{$businessId}/owned_pages",
+                [
+                    'fields' => self::FACEBOOK_PAGE_FIELDS,
+                    'access_token' => $userAccessToken,
+                    'limit' => 100,
+                ]
+            );
+            Log::info('Facebook owned_pages for business', [
+                'business_id' => $businessId,
+                'count' => count($ownedPages),
+                'page_ids' => array_map(
+                    fn ($p) => is_array($p) ? ($p['id'] ?? null) : null,
+                    $ownedPages
+                ),
+            ]);
+
+            foreach ($ownedPages as $ownedPage) {
+                if (! is_array($ownedPage)) {
+                    continue;
+                }
+                $pageId = (string) ($ownedPage['id'] ?? '');
+                if ($pageId === '') {
+                    continue;
+                }
+
+                if (! isset($pagesById[$pageId])) {
+                    $pagesById[$pageId] = $ownedPage;
+                    continue;
+                }
+
+                // Merge missing fields while preferring existing primary source values.
+                $existing = $pagesById[$pageId];
+                foreach (['name', 'access_token', 'fan_count', 'followers_count', 'picture'] as $field) {
+                    if (! array_key_exists($field, $existing) || $existing[$field] === null || $existing[$field] === '') {
+                        if (array_key_exists($field, $ownedPage)) {
+                            $existing[$field] = $ownedPage[$field];
+                        }
+                    }
+                }
+                $pagesById[$pageId] = $existing;
+            }
+        }
+        Log::info('Facebook total pages merged', [
+            'total' => count($pagesById),
+            'all_page_ids' => array_keys($pagesById),
+        ]);
+
+        return $pagesById;
+    }
+
+    /**
+     * @return array<int, mixed>
+     */
+    private static function fetchBusinessesSafely(string $graphVersion, string $userAccessToken): array
+    {
+        try {
+            $url = "https://graph.facebook.com/{$graphVersion}/me/businesses";
+            $query = [
+                'fields' => 'id,name',
+                'access_token' => $userAccessToken,
+                'limit' => 100,
+            ];
+
+            $items = [];
+            $nextUrl = $url;
+            $nextQuery = $query;
+
+            while ($nextUrl !== null) {
+                $response = Http::timeout(20)->get($nextUrl, $nextQuery);
+                if (! $response->successful()) {
+                    Log::warning('Facebook business pages unavailable', [
+                        'reason' => 'Missing permission or dev mode limitation',
+                        'status' => $response->status(),
+                    ]);
+
+                    return [];
+                }
+
+                $data = $response->json('data');
+                if (is_array($data)) {
+                    foreach ($data as $row) {
+                        $items[] = $row;
+                    }
+                }
+
+                $next = $response->json('paging.next');
+                $nextUrl = is_string($next) && $next !== '' ? $next : null;
+                $nextQuery = [];
+            }
+
+            return $items;
+        } catch (Throwable $e) {
+            Log::warning('Facebook business pages unavailable', [
+                'reason' => 'Missing permission or dev mode limitation',
+                'status' => null,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $query
+     * @return array<int, mixed>
+     */
+    private static function fetchPagedGraphCollection(string $url, array $query): array
+    {
+        $items = [];
+        $nextUrl = $url;
+        $nextQuery = $query;
+
+        while ($nextUrl !== null) {
+            $response = Http::timeout(20)->get($nextUrl, $nextQuery);
+            if (! $response->successful()) {
+                Log::error('Facebook Graph API error', [
+                    'url' => $nextUrl,
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+                break;
+            }
+
+            $data = $response->json('data');
+            if (is_array($data)) {
+                foreach ($data as $row) {
+                    $items[] = $row;
+                }
+            }
+
+            $next = $response->json('paging.next');
+            $nextUrl = is_string($next) && $next !== '' ? $next : null;
+            $nextQuery = [];
+        }
+
+        return $items;
     }
 
     private static function shortUrl(mixed $url): ?string

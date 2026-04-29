@@ -127,13 +127,39 @@ class FacebookAuthController extends Controller
             });
         }
 
-        $workspace = Workspace::query()
-            ->where('owner_id', $user->id)
-            ->orderBy('id')
+        $workspace = $user->workspaces()
+            ->wherePivot('is_active', true)
+            ->orderBy('workspaces.id')
             ->first();
         if (! $workspace) {
-            $workspace = $user->workspaces()->orderBy('workspaces.id')->first();
+            $workspace = Workspace::query()
+                ->where('owner_id', $user->id)
+                ->orderBy('id')
+                ->first();
         }
+        if (! $workspace) {
+            $workspaceName = $user->name."'s Workspace";
+            $workspace = Workspace::query()->create([
+                'owner_id' => $user->id,
+                'name' => $workspaceName,
+                'slug' => $this->makeWorkspaceSlug($user->id, $workspaceName),
+                'plan' => 'free',
+            ]);
+        }
+
+        $hasMembership = $user->workspaces()
+            ->where('workspaces.id', $workspace->id)
+            ->wherePivot('is_active', true)
+            ->exists();
+        if (! $hasMembership) {
+            $workspace->members()->syncWithoutDetaching([
+                $user->id => [
+                    'role' => 'owner',
+                    'is_active' => true,
+                ],
+            ]);
+        }
+
         if ($workspace) {
             $connectedPages = SocialAccountProvisioner::connectFacebookPagesForWorkspace($workspace, $fbId, $accessToken, $expiresAt);
             if ($connectedPages < 1) {
@@ -152,6 +178,7 @@ class FacebookAuthController extends Controller
 
         Auth::login($user, true);
         $request->session()->regenerate();
+        $request->session()->put('current_workspace_id', (int) $workspace->id);
 
         return redirect()->intended(route('dashboard'));
     }

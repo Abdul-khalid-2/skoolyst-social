@@ -127,6 +127,7 @@ class SocialAccountController extends Controller
                     'account_name' => $account?->account_name,
                     'account_handle' => $account?->account_handle,
                     'followers_count' => (int) ($account?->followers_count ?? 0),
+                    'fan_count' => (int) ($account?->fan_count ?? 0),
                     'token_expires_at' => $account?->token_expires_at?->toIso8601String(),
                 ];
             })
@@ -216,7 +217,7 @@ class SocialAccountController extends Controller
 
         $graphVersion = (string) config('services.facebook.graph_version', 'v24.0');
         $res = Http::timeout(20)->get("https://graph.facebook.com/{$graphVersion}/me/accounts", [
-            'fields' => 'id,name,access_token,picture',
+            'fields' => 'id,name,access_token,fan_count,followers_count,picture',
             'access_token' => $userToken,
         ]);
         if (! $res->successful()) {
@@ -248,7 +249,7 @@ class SocialAccountController extends Controller
 
         if (! is_array($selectedPage) && $preferredPageId !== '') {
             $direct = Http::timeout(20)->get("https://graph.facebook.com/{$graphVersion}/{$preferredPageId}", [
-                'fields' => 'id,name,access_token,picture',
+                'fields' => 'id,name,access_token,fan_count,followers_count,picture',
                 'access_token' => $userToken,
             ]);
             if (! $direct->successful()) {
@@ -265,6 +266,8 @@ class SocialAccountController extends Controller
                 'id' => $id,
                 'name' => $direct->json('name'),
                 'access_token' => $pageToken,
+                'fan_count' => $direct->json('fan_count'),
+                'followers_count' => $direct->json('followers_count'),
                 'picture' => $direct->json('picture'),
             ];
         } elseif (! is_array($selectedPage)) {
@@ -290,6 +293,8 @@ class SocialAccountController extends Controller
                 'avatar' => $this->shortUrl($selectedPage['picture']['data']['url'] ?? null),
                 'access_token' => encrypt($pageToken),
                 'token_expires_at' => $user?->facebook_token_expires_at,
+                'followers_count' => (int) ($selectedPage['followers_count'] ?? 0),
+                'fan_count' => (int) ($selectedPage['fan_count'] ?? 0),
                 'is_connected' => true,
             ],
         );
@@ -352,6 +357,7 @@ class SocialAccountController extends Controller
             'token_expires_at' => $account->token_expires_at?->toIso8601String(),
             'account_handle' => $account->account_handle,
             'followers_count' => (int) $account->followers_count,
+            'fan_count' => (int) $account->fan_count,
         ];
     }
 }
