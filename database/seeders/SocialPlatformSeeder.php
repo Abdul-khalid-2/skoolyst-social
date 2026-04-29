@@ -2,7 +2,7 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\SocialPlatform;
 use Illuminate\Database\Seeder;
 
 class SocialPlatformSeeder extends Seeder
@@ -12,13 +12,6 @@ class SocialPlatformSeeder extends Seeder
      */
     public function run(): void
     {
-        $socialPlatform = new class extends Model
-        {
-            protected $table = 'social_platforms';
-
-            protected $guarded = [];
-        };
-
         $platforms = [
             [
                 'name' => 'Facebook',
@@ -90,7 +83,7 @@ class SocialPlatformSeeder extends Seeder
         ];
 
         foreach ($platforms as $platform) {
-            $socialPlatform->newQuery()->updateOrCreate(
+            SocialPlatform::query()->updateOrCreate(
                 ['slug' => $platform['slug']],
                 [
                     'name' => $platform['name'],
@@ -101,8 +94,6 @@ class SocialPlatformSeeder extends Seeder
                     'supports_media' => true,
                     'icon' => null,
                     'connection_options' => $platform['connection_options'] ?? null,
-                    'updated_at' => now(),
-                    'created_at' => now(),
                 ]
             );
         }
