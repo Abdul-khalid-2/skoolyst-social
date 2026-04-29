@@ -17,7 +17,7 @@
             </div>
 
             <div class="flex-1 flex flex-col justify-center">
-                <h1 class="text-4xl font-bold leading-tight max-w-md">Automate your social presence.</h1>
+                <h1 class="text-4xl font-bold leading-tight max-w-md">Automate Test Pipline your social presence.</h1>
                 <p class="mt-4 text-blue-200 max-w-md">
                     Publish once from Skoolyst and share your school updates across every connected social account.
                 </p>
