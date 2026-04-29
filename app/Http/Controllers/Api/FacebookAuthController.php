@@ -26,11 +26,18 @@ class FacebookAuthController extends Controller
         $version = (string) config('services.facebook.graph_version', 'v24.0');
 
         return Socialite::driver('facebook')
-            ->usingGraphVersion($version)
-            // ->scopes(['email', 'public_profile'])
-            ->with(['config_id' => env('FACEBOOK_LOGIN_CONFIG_ID')])
-            ->stateless()
-            ->redirect();
+        ->usingGraphVersion($version)
+        ->scopes([
+            'email',
+            'public_profile',
+            'pages_show_list',
+            'pages_read_engagement',
+            'pages_manage_posts',
+            'pages_manage_metadata',
+        ])
+        ->with(['config_id' => env('FACEBOOK_LOGIN_CONFIG_ID')])
+        ->stateless()
+        ->redirect();
     }
 
     public function handleCallback(Request $request): RedirectResponse
