@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Post;
+use App\Services\InstagramPostService;
 use App\Services\SocialPostService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -14,7 +15,7 @@ class PublishScheduledPosts extends Command
 
     protected $description = 'Publish posts that are scheduled for the current time or earlier.';
 
-    public function handle(SocialPostService $socialPostService): int
+    public function handle(SocialPostService $socialPostService, InstagramPostService $instagramPostService): int
     {
         $processed = 0;
 
@@ -50,7 +51,7 @@ class PublishScheduledPosts extends Command
             $this->info("Publishing Post ID: {$post->id}");
 
             try {
-                $this->publishSingleScheduledPost($post, $socialPostService);
+                $this->publishSingleScheduledPost($post, $socialPostService, $instagramPostService);
             } catch (Throwable $e) {
                 report($e);
                 $post->refresh();
@@ -72,7 +73,7 @@ class PublishScheduledPosts extends Command
         return self::SUCCESS;
     }
 
-    private function publishSingleScheduledPost(Post $post, SocialPostService $socialPostService): void
+    private function publishSingleScheduledPost(Post $post, SocialPostService $socialPostService, InstagramPostService $instagramPostService): void
     {
         $media = $post->postMedia->first();
         $mediaUrl = $media ? $media->url : null;
@@ -85,11 +86,11 @@ class PublishScheduledPosts extends Command
         foreach ($post->postTargets as $target) {
             $platform = $target->socialPlatform?->slug;
 
-            if ($platform !== 'facebook') {
+            if (! in_array($platform, ['facebook', 'instagram'], true)) {
                 $skipped++;
                 $target->update([
                     'status' => 'skipped',
-                    'error_message' => __('Immediate publishing is currently enabled for Facebook only.'),
+                    'error_message' => __('Publishing is enabled for Facebook and Instagram only.'),
                 ]);
 
                 continue;
@@ -99,7 +100,7 @@ class PublishScheduledPosts extends Command
                 $failed++;
                 $target->update([
                     'status' => 'failed',
-                    'error_message' => __('Connected Facebook account was not found.'),
+                    'error_message' => __('Connected social account was not found.'),
                 ]);
 
                 continue;
@@ -107,34 +108,63 @@ class PublishScheduledPosts extends Command
 
             $target->update(['status' => 'publishing', 'error_message' => null]);
 
-            $result = $socialPostService->postToFacebookAccount(
-                $target->socialAccount,
-                $post->caption,
-                null,
-                $mediaUrl,
-                $mediaType
-            );
+            if ($platform === 'facebook') {
+                $result = $socialPostService->postToFacebookAccount(
+                    $target->socialAccount,
+                    $post->caption,
+                    null,
+                    $mediaUrl,
+                    $mediaType
+                );
 
-            if (($result['success'] ?? false) === true) {
-                $published++;
+                if (($result['success'] ?? false) === true) {
+                    $published++;
+                    $target->update([
+                        'status' => 'published',
+                        'platform_post_id' => $result['post_id'] ?? null,
+                        'published_at' => now(),
+                        'error_message' => null,
+                    ]);
+                    $post->fb_post_id = $result['post_id'] ?? null;
+
+                    continue;
+                }
+
+                $failed++;
+                $error = (string) ($result['error'] ?? 'Facebook publish failed.');
                 $target->update([
-                    'status' => 'published',
-                    'platform_post_id' => $result['post_id'] ?? null,
-                    'published_at' => now(),
-                    'error_message' => null,
+                    'status' => 'failed',
+                    'error_message' => $error,
                 ]);
-                $post->fb_post_id = $result['post_id'] ?? null;
+                $post->fb_error = $error;
 
                 continue;
             }
 
-            $failed++;
-            $error = (string) ($result['error'] ?? 'Facebook publish failed.');
-            $target->update([
-                'status' => 'failed',
-                'error_message' => $error,
-            ]);
-            $post->fb_error = $error;
+            if ($platform === 'instagram') {
+                $result = $instagramPostService->publishPost($target->socialAccount, $post, $target);
+
+                if (($result['success'] ?? false) === true) {
+                    $published++;
+                    $target->update([
+                        'status' => 'published',
+                        'platform_post_id' => $result['post_id'] ?? null,
+                        'published_at' => now(),
+                        'error_message' => null,
+                    ]);
+                    $post->ig_post_id = $result['post_id'] ?? null;
+
+                    continue;
+                }
+
+                $failed++;
+                $error = (string) ($result['error'] ?? 'Instagram publish failed.');
+                $target->update([
+                    'status' => 'failed',
+                    'error_message' => $error,
+                ]);
+                $post->ig_error = $error;
+            }
         }
 
         $post->status = match (true) {

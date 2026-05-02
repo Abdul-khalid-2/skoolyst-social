@@ -171,7 +171,11 @@
                             </div>
 
                             <p class="text-center text-sm text-gray-600 mb-6">
-                                {{ __('You will be redirected to :name to authorize Skoolyst Social AI to post on your behalf.', ['name' => $platform->name]) }}
+                                @if ($platform->slug === 'instagram')
+                                    {{ __('Instagram Business accounts are linked through Meta. You’ll continue with Facebook login — approve Pages — and any Instagram Professional accounts linked to those Pages will appear here.') }}
+                                @else
+                                    {{ __('You will be redirected to :name to authorize Skoolyst Social AI to post on your behalf.', ['name' => $platform->name]) }}
+                                @endif
                             </p>
 
                             <div class="flex gap-3">
@@ -182,7 +186,8 @@
                                 >
                                     {{ __('Cancel') }}
                                 </button>
-                                @if ($platform->slug === 'facebook')
+                                @if (in_array($platform->slug, ['facebook', 'instagram'], true))
+                                    {{-- Instagram Business uses the same Meta Facebook Login flow; IG accounts are linked after Pages are authorized. --}}
                                     <a
                                         href="{{ route('api.auth.facebook.redirect') }}"
                                         class="flex-1 text-center text-white rounded-xl py-2.5 text-sm font-semibold active:scale-95 transition-all"
@@ -226,10 +231,10 @@
                     </button>
                 </div>
                 <ul class="text-sm text-gray-700 space-y-2">
-                    <li>{{ __('1) Login with Facebook first.') }}</li>
-                    <li>{{ __('2) Open Accounts and click Connect on Facebook.') }}</li>
-                    <li>{{ __('3) After connected, Create Post enables Facebook publishing.') }}</li>
-                    <li>{{ __('4) Other platforms will remain disabled until their OAuth flow is added.') }}</li>
+                    <li>{{ __('1) Use Connect on Facebook or Instagram — both use the same Meta (Facebook) sign-in.') }}</li>
+                    <li>{{ __('2) Approve Page access; Instagram Business accounts linked to those Pages are saved automatically.') }}</li>
+                    <li>{{ __('3) Then Create Post can publish to connected Facebook Pages and Instagram accounts.') }}</li>
+                    <li>{{ __('4) Other platforms stay disabled until their OAuth flow is added.') }}</li>
                 </ul>
             </div>
         </div>

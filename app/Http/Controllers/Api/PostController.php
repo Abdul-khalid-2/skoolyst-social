@@ -10,6 +10,7 @@ use App\Models\PostTarget;
 use App\Models\SocialAccount;
 use App\Models\SocialPlatform;
 use App\Models\Workspace;
+use App\Services\InstagramPostService;
 use App\Services\SocialPostService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -23,7 +24,10 @@ use Illuminate\Validation\ValidationException;
 
 class PostController extends Controller
 {
-    public function __construct(private readonly SocialPostService $socialPostService) {}
+    public function __construct(
+        private readonly SocialPostService $socialPostService,
+        private readonly InstagramPostService $instagramPostService,
+    ) {}
 
     public function index(Request $request, Workspace $workspace): JsonResponse
     {
@@ -250,12 +254,14 @@ class PostController extends Controller
         $skipped = 0;
         foreach ($post->postTargets as $target) {
             $platform = $target->socialPlatform?->slug;
-            if ($platform !== 'facebook') {
+
+            if (! in_array($platform, ['facebook', 'instagram'], true)) {
                 $skipped++;
                 $target->update([
                     'status' => 'skipped',
-                    'error_message' => __('Immediate publishing is currently enabled for Facebook only.'),
+                    'error_message' => __('Publishing is enabled for Facebook and Instagram only.'),
                 ]);
+
                 continue;
             }
 
@@ -263,39 +269,71 @@ class PostController extends Controller
                 $failed++;
                 $target->update([
                     'status' => 'failed',
-                    'error_message' => __('Connected Facebook account was not found.'),
+                    'error_message' => __('Connected social account was not found.'),
                 ]);
+
                 continue;
             }
 
             $target->update(['status' => 'publishing', 'error_message' => null]);
-            $result = $this->socialPostService->postToFacebookAccount(
-                $target->socialAccount, 
-                $post->caption, 
-                null, 
-                $mediaUrl, 
-                $mediaType
-            );
 
-            if (($result['success'] ?? false) === true) {
-                $published++;
+            if ($platform === 'facebook') {
+                $result = $this->socialPostService->postToFacebookAccount(
+                    $target->socialAccount,
+                    $post->caption,
+                    null,
+                    $mediaUrl,
+                    $mediaType
+                );
+
+                if (($result['success'] ?? false) === true) {
+                    $published++;
+                    $target->update([
+                        'status' => 'published',
+                        'platform_post_id' => $result['post_id'] ?? null,
+                        'published_at' => now(),
+                        'error_message' => null,
+                    ]);
+                    $post->fb_post_id = $result['post_id'] ?? null;
+
+                    continue;
+                }
+
+                $failed++;
+                $error = (string) ($result['error'] ?? 'Facebook publish failed.');
                 $target->update([
-                    'status' => 'published',
-                    'platform_post_id' => $result['post_id'] ?? null,
-                    'published_at' => now(),
-                    'error_message' => null,
+                    'status' => 'failed',
+                    'error_message' => $error,
                 ]);
-                $post->fb_post_id = $result['post_id'] ?? null;
+                $post->fb_error = $error;
+
                 continue;
             }
 
-            $failed++;
-            $error = (string) ($result['error'] ?? 'Facebook publish failed.');
-            $target->update([
-                'status' => 'failed',
-                'error_message' => $error,
-            ]);
-            $post->fb_error = $error;
+            if ($platform === 'instagram') {
+                $result = $this->instagramPostService->publishPost($target->socialAccount, $post, $target);
+
+                if (($result['success'] ?? false) === true) {
+                    $published++;
+                    $target->update([
+                        'status' => 'published',
+                        'platform_post_id' => $result['post_id'] ?? null,
+                        'published_at' => now(),
+                        'error_message' => null,
+                    ]);
+                    $post->ig_post_id = $result['post_id'] ?? null;
+
+                    continue;
+                }
+
+                $failed++;
+                $error = (string) ($result['error'] ?? 'Instagram publish failed.');
+                $target->update([
+                    'status' => 'failed',
+                    'error_message' => $error,
+                ]);
+                $post->ig_error = $error;
+            }
         }
 
         $post->status = match (true) {

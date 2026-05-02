@@ -11,7 +11,7 @@ use Throwable;
 
 class SocialAccountProvisioner
 {
-    private const FACEBOOK_PAGE_FIELDS = 'id,name,access_token,fan_count,followers_count,picture';
+    private const FACEBOOK_PAGE_FIELDS = 'id,name,access_token,fan_count,followers_count,picture,instagram_business_account{id,username,profile_picture_url,name}';
 
     public static function ensureForWorkspace(Workspace $workspace): void
     {
@@ -101,6 +101,18 @@ class SocialAccountProvisioner
                     'is_connected' => true,
                 ],
             );
+
+            $igNode = $page['instagram_business_account'] ?? null;
+            if (is_array($igNode) && isset($igNode['id'])) {
+                self::upsertInstagramBusinessAccount(
+                    $workspace,
+                    $facebookUserId,
+                    $pageId,
+                    $pageToken,
+                    $expiresAt,
+                    $igNode
+                );
+            }
 
             $connected++;
         }
@@ -307,5 +319,54 @@ class SocialAccountProvisioner
         }
 
         return strlen($url) <= 255 ? $url : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $instagramBusinessAccount
+     */
+    private static function upsertInstagramBusinessAccount(
+        Workspace $workspace,
+        string $facebookUserId,
+        string $facebookPageId,
+        string $pageAccessToken,
+        ?\Illuminate\Support\Carbon $expiresAt,
+        array $instagramBusinessAccount
+    ): void {
+        $igId = (string) ($instagramBusinessAccount['id'] ?? '');
+        if ($igId === '') {
+            return;
+        }
+
+        $instagram = SocialPlatform::query()
+            ->where('slug', 'instagram')
+            ->where('is_active', true)
+            ->first();
+
+        if (! $instagram) {
+            return;
+        }
+
+        SocialAccount::query()->updateOrCreate(
+            [
+                'workspace_id' => $workspace->id,
+                'social_platform_id' => $instagram->id,
+                'platform_page_id' => $igId,
+            ],
+            [
+                'platform_user_id' => $facebookUserId,
+                'account_name' => (string) ($instagramBusinessAccount['name'] ?? $instagramBusinessAccount['username'] ?? 'Instagram'),
+                'account_handle' => (string) ($instagramBusinessAccount['username'] ?? $igId),
+                'avatar' => self::shortUrl($instagramBusinessAccount['profile_picture_url'] ?? null),
+                'access_token' => encrypt($pageAccessToken),
+                'token_expires_at' => $expiresAt,
+                'followers_count' => 0,
+                'fan_count' => 0,
+                'is_connected' => true,
+                'meta' => [
+                    'facebook_page_id' => $facebookPageId,
+                    'instagram_user_id' => $igId,
+                ],
+            ],
+        );
     }
 }

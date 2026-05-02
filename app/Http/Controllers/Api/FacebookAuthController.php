@@ -34,6 +34,11 @@ class FacebookAuthController extends Controller
             'pages_read_engagement',
             'pages_manage_posts',
             'pages_manage_metadata',
+            'instagram_basic',
+            'instagram_content_publish',
+            'instagram_manage_insights',
+            'instagram_manage_comments',
+            'business_management',
         ])
         ->with(['config_id' => env('FACEBOOK_LOGIN_CONFIG_ID')])
         ->stateless()
