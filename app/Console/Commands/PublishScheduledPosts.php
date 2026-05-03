@@ -75,6 +75,11 @@ class PublishScheduledPosts extends Command
 
     private function publishSingleScheduledPost(Post $post, SocialPostService $socialPostService, InstagramPostService $instagramPostService): void
     {
+        $maxExec = (int) config('services.social_publish.max_execution_seconds', 600);
+        if ($maxExec > 0) {
+            @set_time_limit($maxExec);
+        }
+
         $media = $post->postMedia->first();
         $mediaUrl = $media ? $media->url : null;
         $mediaType = $media ? $media->type : null;

@@ -59,7 +59,10 @@ class SocialPostService
     private function postToFacebookPage(string $pageId, string $token, string $message, ?string $link = null, ?string $mediaUrl = null, ?string $mediaType = null): array
     {
         $version = (string) env('META_API_VERSION', config('services.facebook.graph_version', 'v24.0'));
-        $client = new Client(['base_uri' => "https://graph.facebook.com/{$version}/", 'timeout' => 30]);
+        $requestTimeout = ($mediaUrl && $mediaType === 'video')
+            ? (int) config('services.social_publish.facebook_video_timeout', 600)
+            : 30;
+        $client = new Client(['base_uri' => "https://graph.facebook.com/{$version}/", 'timeout' => $requestTimeout]);
         
         $endpoint = "{$pageId}/feed";
         $options = [];

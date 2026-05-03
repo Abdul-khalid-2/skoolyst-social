@@ -126,7 +126,7 @@ class InstagramPostService
     }
 
     /**
-     * Video / Reels: uses publicly reachable video_url (same constraints as Graph API docs).
+     * Video feed posts: Instagram deprecated media_type=VIDEO; use REELS + share_to_feed.
      *
      * @return array{success: bool, post_id?: string, error?: string}
      */
@@ -146,12 +146,13 @@ class InstagramPostService
             return ['success' => false, 'error' => 'Could not produce a public HTTPS URL Facebook can fetch. Set MEDIA_MIRROR_DRIVER (catbox|0x0|imgbb|cloudinary) or deploy media to a public host.'];
         }
 
-        $this->writeLog($job, 'info', 'Creating Instagram video container', ['video_url' => $publicUrl]);
+        $this->writeLog($job, 'info', 'Creating Instagram Reels container', ['video_url' => $publicUrl]);
 
         $payload = [
             'video_url' => $publicUrl,
             'caption' => mb_substr($caption, 0, 2200),
-            'media_type' => 'VIDEO',
+            'media_type' => 'REELS',
+            'share_to_feed' => 'true',
             'access_token' => $token,
         ];
 
@@ -162,19 +163,19 @@ class InstagramPostService
 
         if (! $create->successful()) {
             $body = $create->json() ?: $create->body();
-            $this->writeLog($job, 'error', 'Instagram /media (video) failed', is_array($body) ? $body : ['body' => $body], $create->status());
+            $this->writeLog($job, 'error', 'Instagram /media (reels) failed', is_array($body) ? $body : ['body' => $body], $create->status());
 
             return ['success' => false, 'error' => $this->extractGraphErrorMessage($create->json(), $create->body())];
         }
 
         $creationId = $create->json('id');
         if (! is_string($creationId) || $creationId === '') {
-            return ['success' => false, 'error' => 'Instagram video creation response missing id.'];
+            return ['success' => false, 'error' => 'Instagram Reels container response missing id.'];
         }
 
         $poll = $this->waitForContainerFinished($version, $creationId, $token, $job);
         if (! $poll['success']) {
-            return ['success' => false, 'error' => $poll['error'] ?? 'Instagram video container did not finish.'];
+            return ['success' => false, 'error' => $poll['error'] ?? 'Instagram Reels container did not finish.'];
         }
 
         return $this->publishCreation($version, $igUserId, $token, $creationId, $job);
@@ -257,7 +258,8 @@ class InstagramPostService
      * URL must be publicly reachable and not behind ngrok-free's interstitial,
      * localhost, *.test, etc. When the configured driver detects a non-public
      * host, the local file is uploaded to a public mirror (catbox.moe by
-     * default) and the mirror URL is returned.
+     * default) and the mirror URL is returned. Hostnames containing "staging"
+     * or starting with "dev." also trigger mirroring (Meta often cannot fetch those URLs).
      */
     private function prepareMediaForInstagram(string $mediaUrl, string $kind, PublishJob $job): ?string
     {
@@ -354,6 +356,11 @@ class InstagramPostService
             } elseif ($host === $needle || str_ends_with($host, '.'.$needle)) {
                 return true;
             }
+        }
+
+        // Staging / dev hostnames are often unreachable by Meta's fetchers (VPN, IP allowlists, etc.).
+        if (str_contains($host, 'staging') || str_starts_with($host, 'dev.')) {
+            return true;
         }
 
         return false;

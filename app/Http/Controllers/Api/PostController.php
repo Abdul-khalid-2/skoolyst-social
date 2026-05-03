@@ -243,6 +243,11 @@ class PostController extends Controller
 
     private function publishPostTargets(Post $post): void
     {
+        $maxExec = (int) config('services.social_publish.max_execution_seconds', 600);
+        if ($maxExec > 0) {
+            @set_time_limit($maxExec);
+        }
+
         $post->load(['postTargets.socialPlatform', 'postTargets.socialAccount', 'postMedia']);
 
         $media = $post->postMedia->first();

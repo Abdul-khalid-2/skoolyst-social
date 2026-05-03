@@ -82,4 +82,13 @@ return [
         )))),
     ],
 
+    /*
+    | Facebook video upload + Instagram container polling can exceed PHP's default
+    | max_execution_time (often 60s). Web requests use set_time_limit() before publishing.
+    */
+    'social_publish' => [
+        'max_execution_seconds' => (int) env('SOCIAL_PUBLISH_MAX_EXECUTION', 600),
+        'facebook_video_timeout' => (int) env('FACEBOOK_VIDEO_UPLOAD_TIMEOUT', 600),
+    ],
+
 ];
