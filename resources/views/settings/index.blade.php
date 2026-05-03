@@ -17,6 +17,8 @@
         $defaultSection = 'profile';
     } elseif ($errors->hasAny(['current_password', 'password', 'password_confirmation'])) {
         $defaultSection = 'security';
+    } elseif ($errors->has('confirm')) {
+        $defaultSection = 'integrations';
     } else {
         $defaultSection = 'workspace';
     }
@@ -563,6 +565,37 @@
                             >
                                 Open Accounts
                             </a>
+                            <p class="mt-4 text-xs text-gray-500">
+                                <a href="{{ route('privacy.data-deletion') }}" class="text-blue-600 hover:underline">User data deletion (Facebook / Instagram)</a>
+                            </p>
+                            @if ($user->facebook_id)
+                                <div class="mt-6 rounded-xl border border-amber-200 bg-amber-50/90 p-4">
+                                    <h4 class="text-sm font-semibold text-gray-900">Facebook &amp; Instagram data</h4>
+                                    <p class="mt-1 text-xs text-gray-600 leading-relaxed">
+                                        Remove your Meta user id, stored Facebook tokens, API tokens, and workspace Facebook/Instagram connections received through Facebook Login.
+                                    </p>
+                                    <form method="post" action="{{ route('settings.facebook-data.destroy') }}" class="mt-4 space-y-3">
+                                        @csrf
+                                        <label class="flex items-start gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                name="confirm"
+                                                value="1"
+                                                class="mt-1 rounded border-gray-300 text-red-600 focus:ring-red-500"
+                                            />
+                                            <span class="text-xs text-gray-700">
+                                                I understand this disconnects Facebook/Instagram publishing for my workspaces and removes stored Meta tokens from Skoolyst.
+                                            </span>
+                                        </label>
+                                        @error('confirm')
+                                            <p class="text-xs text-red-600">{{ $message }}</p>
+                                        @enderror
+                                        <x-button type="submit" variant="danger" class="font-medium">
+                                            Remove Facebook-connected data
+                                        </x-button>
+                                    </form>
+                                </div>
+                            @endif
                         </div>
                     </div>
                 </div>

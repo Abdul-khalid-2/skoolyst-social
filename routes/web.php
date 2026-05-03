@@ -4,6 +4,7 @@ use App\Http\Controllers\AccountsController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CreatePostController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\FacebookDataDeletionController;
 use App\Http\Controllers\PostsController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SettingsController;
@@ -14,6 +15,9 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', function () {
     return redirect()->route('dashboard');
 });
+
+Route::get('/privacy/data-deletion', [FacebookDataDeletionController::class, 'show'])
+    ->name('privacy.data-deletion');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('login', [AuthController::class, 'showLogin'])->name('login');
@@ -35,6 +39,7 @@ Route::middleware(['auth', 'workspace.context'])->group(function (): void {
     Route::view('analytics', 'analytics.index');
     Route::get('settings', [SettingsController::class, 'index'])->name('settings');
     Route::put('settings/workspace', [SettingsController::class, 'updateWorkspace'])->name('settings.workspace');
+    Route::post('settings/facebook-data', [SettingsController::class, 'destroyFacebookData'])->name('settings.facebook-data.destroy');
     Route::get('profile', [ProfileController::class, 'index'])->name('profile');
     Route::put('profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');

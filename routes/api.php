@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FacebookAuthController;
+use App\Http\Controllers\FacebookDataDeletionController;
 use App\Http\Controllers\Api\PostController;
 use App\Http\Controllers\Api\SocialAccountController;
 use App\Http\Controllers\Api\WorkspaceController;
@@ -14,6 +15,10 @@ Route::middleware('throttle:20,1')->group(function () {
 
     Route::get('/auth/facebook/redirect', [FacebookAuthController::class, 'redirectToFacebook'])->name('api.auth.facebook.redirect');
 });
+
+Route::post('/auth/facebook/data-deletion', [FacebookDataDeletionController::class, 'callback'])
+    ->middleware('throttle:120,1')
+    ->name('api.auth.facebook.data-deletion');
 
 // Session (web) middleware required so the browser is logged in after OAuth.
 Route::middleware(['web', 'throttle:20,1'])->group(function () {

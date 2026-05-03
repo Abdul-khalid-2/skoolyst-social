@@ -35,6 +35,11 @@ return [
         ],
     ],
 
+    /*
+    | Meta “User data deletion” (Facebook Login / Instagram):
+    | - Data deletion callback URL: POST {APP_URL}/api/auth/facebook/data-deletion
+    | - Public instructions/status page: GET {APP_URL}/privacy/data-deletion
+    */
     'facebook' => [
         'client_id' => env('FACEBOOK_APP_ID'),
         'client_secret' => env('FACEBOOK_APP_SECRET'),
