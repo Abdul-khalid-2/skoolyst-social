@@ -11,7 +11,7 @@ use Throwable;
 
 class SocialAccountProvisioner
 {
-    private const FACEBOOK_PAGE_FIELDS = 'id,name,access_token,fan_count,followers_count,picture,instagram_business_account{id,username,profile_picture_url,name}';
+    private const FACEBOOK_PAGE_FIELDS = 'id,name,access_token,fan_count,followers_count,picture,likes.limit(0).summary(true),instagram_business_account{id,username,profile_picture_url,name,followers_count,follows_count,media_count}';
 
     public static function ensureForWorkspace(Workspace $workspace): void
     {
@@ -98,6 +98,8 @@ class SocialAccountProvisioner
                     'token_expires_at' => $expiresAt,
                     'followers_count' => (int) ($page['followers_count'] ?? 0),
                     'fan_count' => (int) ($page['fan_count'] ?? 0),
+                    'following_count' => self::pageFollowingCountFromLikesEdge($page),
+                    'posts_count' => 0,
                     'is_connected' => true,
                 ],
             );
@@ -206,7 +208,7 @@ class SocialAccountProvisioner
 
                 // Merge missing fields while preferring existing primary source values.
                 $existing = $pagesById[$pageId];
-                foreach (['name', 'access_token', 'fan_count', 'followers_count', 'picture'] as $field) {
+                foreach (['name', 'access_token', 'fan_count', 'followers_count', 'following_count', 'picture'] as $field) {
                     if (! array_key_exists($field, $existing) || $existing[$field] === null || $existing[$field] === '') {
                         if (array_key_exists($field, $ownedPage)) {
                             $existing[$field] = $ownedPage[$field];
@@ -312,6 +314,23 @@ class SocialAccountProvisioner
         return $items;
     }
 
+    public static function pageFollowingCountFromLikesEdge(mixed $page): int
+    {
+        if (! is_array($page)) {
+            return 0;
+        }
+        $likes = $page['likes'] ?? null;
+        if (! is_array($likes)) {
+            return 0;
+        }
+        $summary = $likes['summary'] ?? null;
+        if (! is_array($summary)) {
+            return 0;
+        }
+
+        return (int) ($summary['total_count'] ?? 0);
+    }
+
     private static function shortUrl(mixed $url): ?string
     {
         if (! is_string($url) || $url === '') {
@@ -324,7 +343,7 @@ class SocialAccountProvisioner
     /**
      * @param  array<string, mixed>  $instagramBusinessAccount
      */
-    private static function upsertInstagramBusinessAccount(
+    public static function upsertInstagramBusinessAccount(
         Workspace $workspace,
         string $facebookUserId,
         string $facebookPageId,
@@ -359,7 +378,9 @@ class SocialAccountProvisioner
                 'avatar' => self::shortUrl($instagramBusinessAccount['profile_picture_url'] ?? null),
                 'access_token' => encrypt($pageAccessToken),
                 'token_expires_at' => $expiresAt,
-                'followers_count' => 0,
+                'followers_count' => (int) ($instagramBusinessAccount['followers_count'] ?? 0),
+                'following_count' => (int) ($instagramBusinessAccount['follows_count'] ?? 0),
+                'posts_count' => (int) ($instagramBusinessAccount['media_count'] ?? 0),
                 'fan_count' => 0,
                 'is_connected' => true,
                 'meta' => [

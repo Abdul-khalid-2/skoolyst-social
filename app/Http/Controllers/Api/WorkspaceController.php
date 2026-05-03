@@ -78,6 +78,8 @@ class WorkspaceController extends Controller
                     'account_name' => $account?->account_name,
                     'account_handle' => $account?->account_handle,
                     'followers_count' => (int) ($account?->followers_count ?? 0),
+                    'following_count' => (int) ($account?->following_count ?? 0),
+                    'posts_count' => (int) ($account?->posts_count ?? 0),
                 ];
             })
             ->values();
@@ -147,6 +149,8 @@ class WorkspaceController extends Controller
                 'access_token' => 'oauth-pending',
                 'account_handle' => null,
                 'followers_count' => 0,
+                'following_count' => 0,
+                'posts_count' => 0,
             ]);
         }
 

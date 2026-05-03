@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\SocialAccount;
 use App\Models\SocialPlatform;
 use App\Models\Workspace;
+use App\Services\SocialAccountProvisioner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -128,6 +129,8 @@ class SocialAccountController extends Controller
                     'account_handle' => $account?->account_handle,
                     'followers_count' => (int) ($account?->followers_count ?? 0),
                     'fan_count' => (int) ($account?->fan_count ?? 0),
+                    'following_count' => (int) ($account?->following_count ?? 0),
+                    'posts_count' => (int) ($account?->posts_count ?? 0),
                     'token_expires_at' => $account?->token_expires_at?->toIso8601String(),
                 ];
             })
@@ -216,8 +219,9 @@ class SocialAccountController extends Controller
         }
 
         $graphVersion = (string) config('services.facebook.graph_version', 'v24.0');
+        $pageFields = 'id,name,access_token,fan_count,followers_count,picture,likes.limit(0).summary(true),instagram_business_account{id,username,profile_picture_url,name,followers_count,follows_count,media_count}';
         $res = Http::timeout(20)->get("https://graph.facebook.com/{$graphVersion}/me/accounts", [
-            'fields' => 'id,name,access_token,fan_count,followers_count,picture',
+            'fields' => $pageFields,
             'access_token' => $userToken,
         ]);
         if (! $res->successful()) {
@@ -249,7 +253,7 @@ class SocialAccountController extends Controller
 
         if (! is_array($selectedPage) && $preferredPageId !== '') {
             $direct = Http::timeout(20)->get("https://graph.facebook.com/{$graphVersion}/{$preferredPageId}", [
-                'fields' => 'id,name,access_token,fan_count,followers_count,picture',
+                'fields' => $pageFields,
                 'access_token' => $userToken,
             ]);
             if (! $direct->successful()) {
@@ -269,6 +273,8 @@ class SocialAccountController extends Controller
                 'fan_count' => $direct->json('fan_count'),
                 'followers_count' => $direct->json('followers_count'),
                 'picture' => $direct->json('picture'),
+                'likes' => $direct->json('likes'),
+                'instagram_business_account' => $direct->json('instagram_business_account'),
             ];
         } elseif (! is_array($selectedPage)) {
             return response()->json(['message' => 'No Facebook pages found for this account.'], 422);
@@ -295,10 +301,24 @@ class SocialAccountController extends Controller
                 'token_expires_at' => $user?->facebook_token_expires_at,
                 'followers_count' => (int) ($selectedPage['followers_count'] ?? 0),
                 'fan_count' => (int) ($selectedPage['fan_count'] ?? 0),
+                'following_count' => SocialAccountProvisioner::pageFollowingCountFromLikesEdge($selectedPage),
+                'posts_count' => 0,
                 'is_connected' => true,
             ],
         );
         $account->load('platform');
+
+        $igNode = $selectedPage['instagram_business_account'] ?? null;
+        if (is_array($igNode) && isset($igNode['id'])) {
+            SocialAccountProvisioner::upsertInstagramBusinessAccount(
+                $workspace,
+                (string) ($user?->facebook_id ?? ''),
+                $pageId,
+                $pageToken,
+                $user?->facebook_token_expires_at,
+                $igNode
+            );
+        }
 
         return response()->json([
             'message' => 'Facebook connected successfully.',
@@ -358,6 +378,8 @@ class SocialAccountController extends Controller
             'account_handle' => $account->account_handle,
             'followers_count' => (int) $account->followers_count,
             'fan_count' => (int) $account->fan_count,
+            'following_count' => (int) $account->following_count,
+            'posts_count' => (int) $account->posts_count,
         ];
     }
 }

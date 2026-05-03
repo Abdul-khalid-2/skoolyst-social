@@ -22,6 +22,8 @@ class SocialAccount extends Model
         'scopes',
         'followers_count',
         'fan_count',
+        'following_count',
+        'posts_count',
         'is_connected',
         'meta',
     ];
@@ -34,6 +36,8 @@ class SocialAccount extends Model
             'meta' => 'array',
             'followers_count' => 'integer',
             'fan_count' => 'integer',
+            'following_count' => 'integer',
+            'posts_count' => 'integer',
             'is_connected' => 'boolean',
         ];
     }

@@ -90,8 +90,23 @@
                                             <div>
                                                 <p class="text-sm font-semibold text-gray-900">{{ $acc->account_name ?? $platform->name }}</p>
                                                 <p class="text-xs text-gray-500">
+                                                    @php
+                                                        $ph = $platform->slug;
+                                                        $posts = (int) $acc->posts_count;
+                                                        $fol = (int) $acc->followers_count;
+                                                        $ing = (int) $acc->following_count;
+                                                    @endphp
                                                     {{ $acc->account_handle ?: __('Connected account') }}
-                                                    · {{ (int) $acc->followers_count }} {{ __('followers') }}
+                                                    @if ($ph === 'instagram')
+                                                        · {{ $posts }} {{ __('posts') }}
+                                                        · {{ $fol }} {{ __('followers') }}
+                                                        · {{ $ing }} {{ __('following') }}
+                                                    @elseif ($ph === 'facebook')
+                                                        · {{ $fol }} {{ __('followers') }}
+                                                        · {{ $ing }} {{ __('following') }}
+                                                    @else
+                                                        · {{ $fol }} {{ __('followers') }}
+                                                    @endif
                                                 </p>
                                                 @if ($acc->token_expires_at
                                                     && $acc->token_expires_at->isFuture()
