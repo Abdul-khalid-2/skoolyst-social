@@ -98,13 +98,18 @@ class FacebookAuthController extends Controller
                 return $toError('account_disabled');
             }
             $user->name = $name;
-            // ✅ Email sirf tab update karo jab user ke paas
-            // koi email nahi ya FB placeholder email hai
+            // Only adopt Facebook email when empty/placeholder — skip if another user owns it.
             if (
-                !$user->email ||
-                str_contains($user->email, '@users.facebook.local')
+                ! $user->email ||
+                str_contains((string) $user->email, '@users.facebook.local')
             ) {
-                $user->email = $email;
+                $emailTakenByOther = User::query()
+                    ->where('email', $email)
+                    ->where('id', '!=', $user->id)
+                    ->exists();
+                if (! $emailTakenByOther) {
+                    $user->email = $email;
+                }
             }
             $user->facebook_id               = $fbId;
             $user->facebook_access_token     = $accessToken;
