@@ -45,4 +45,36 @@ return [
         'fetch_business_pages' => (bool) env('FACEBOOK_FETCH_BUSINESS_PAGES', true),
     ],
 
+    /*
+    | Public Media Mirror
+    |
+    | Instagram Graph API only accepts a publicly fetchable image_url / video_url
+    | (no direct multipart upload like Facebook). Local dev domains (ngrok-free,
+    | *.test, localhost, 127.0.0.1) are NOT reachable by Facebook's fetcher
+    | because ngrok-free returns its browser warning interstitial. To bypass,
+    | the InstagramPostService re-uploads the local file to a public anonymous
+    | host before sending to Instagram.
+    |
+    | Supported drivers:
+    |   - "catbox"     (free, no signup, https://catbox.moe — DEFAULT)
+    |   - "0x0"        (free, no signup, https://0x0.st)
+    |   - "imgbb"      (requires MEDIA_MIRROR_IMGBB_KEY)
+    |   - "cloudinary" (requires CLOUDINARY_URL or _CLOUD_NAME/_API_KEY/_API_SECRET)
+    |   - "none"       (disable mirroring; send original URL as-is)
+    */
+    'media_mirror' => [
+        'driver' => env('MEDIA_MIRROR_DRIVER', 'catbox'),
+        'imgbb_key' => env('MEDIA_MIRROR_IMGBB_KEY'),
+        'cloudinary' => [
+            'cloud_name' => env('CLOUDINARY_CLOUD_NAME'),
+            'api_key' => env('CLOUDINARY_API_KEY'),
+            'api_secret' => env('CLOUDINARY_API_SECRET'),
+            'url' => env('CLOUDINARY_URL'),
+        ],
+        'force_for_hosts' => array_values(array_filter(array_map('trim', explode(
+            ',',
+            (string) env('MEDIA_MIRROR_FORCE_HOSTS', 'ngrok-free.dev,ngrok-free.app,ngrok.app,ngrok.io,localhost,127.0.0.1,.test,.local')
+        )))),
+    ],
+
 ];

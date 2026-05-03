@@ -87,11 +87,11 @@ class InstagramPostService
         PostMedia $media,
         PublishJob $job
     ): array {
-        $publicUrl = $this->resolvePublicMediaUrl($mediaUrl);
+        $publicUrl = $this->prepareMediaForInstagram($mediaUrl, 'image', $job);
         if ($publicUrl === null) {
             $this->writeLog($job, 'error', 'Could not resolve public URL for Instagram image.', ['stored_url' => $mediaUrl]);
 
-            return ['success' => false, 'error' => 'Could not resolve a public HTTPS URL for the image.'];
+            return ['success' => false, 'error' => 'Could not produce a public HTTPS URL Facebook can fetch. Set MEDIA_MIRROR_DRIVER (catbox|0x0|imgbb|cloudinary) or deploy media to a public host.'];
         }
 
         $this->writeLog($job, 'info', 'Creating Instagram image container', ['image_url' => $publicUrl]);
@@ -109,7 +109,7 @@ class InstagramPostService
             $body = $create->json() ?: $create->body();
             $this->writeLog($job, 'error', 'Instagram /media (image) failed', is_array($body) ? $body : ['body' => $body], $create->status());
 
-            return ['success' => false, 'error' => is_string($create->body()) ? $create->body() : 'Instagram media creation failed.'];
+            return ['success' => false, 'error' => $this->extractGraphErrorMessage($create->json(), $create->body())];
         }
 
         $creationId = $create->json('id');
@@ -139,11 +139,11 @@ class InstagramPostService
         PostMedia $media,
         PublishJob $job
     ): array {
-        $publicUrl = $this->resolvePublicMediaUrl($mediaUrl);
+        $publicUrl = $this->prepareMediaForInstagram($mediaUrl, 'video', $job);
         if ($publicUrl === null) {
             $this->writeLog($job, 'error', 'Could not resolve public URL for Instagram video.', ['stored_url' => $mediaUrl]);
 
-            return ['success' => false, 'error' => 'Could not resolve a public HTTPS URL for the video.'];
+            return ['success' => false, 'error' => 'Could not produce a public HTTPS URL Facebook can fetch. Set MEDIA_MIRROR_DRIVER (catbox|0x0|imgbb|cloudinary) or deploy media to a public host.'];
         }
 
         $this->writeLog($job, 'info', 'Creating Instagram video container', ['video_url' => $publicUrl]);
@@ -164,7 +164,7 @@ class InstagramPostService
             $body = $create->json() ?: $create->body();
             $this->writeLog($job, 'error', 'Instagram /media (video) failed', is_array($body) ? $body : ['body' => $body], $create->status());
 
-            return ['success' => false, 'error' => is_string($create->body()) ? $create->body() : 'Instagram video container creation failed.'];
+            return ['success' => false, 'error' => $this->extractGraphErrorMessage($create->json(), $create->body())];
         }
 
         $creationId = $create->json('id');
@@ -250,23 +250,293 @@ class InstagramPostService
         return ['success' => true, 'post_id' => $postId];
     }
 
-    private function resolvePublicMediaUrl(string $mediaUrl): ?string
+    /**
+     * Prepare a media URL for Instagram's /media endpoint.
+     *
+     * Instagram fetches `image_url` / `video_url` from its servers, so the
+     * URL must be publicly reachable and not behind ngrok-free's interstitial,
+     * localhost, *.test, etc. When the configured driver detects a non-public
+     * host, the local file is uploaded to a public mirror (catbox.moe by
+     * default) and the mirror URL is returned.
+     */
+    private function prepareMediaForInstagram(string $mediaUrl, string $kind, PublishJob $job): ?string
     {
+        $localPath = $this->localPathForMediaUrl($mediaUrl);
+
+        $candidateUrl = null;
         if (str_starts_with($mediaUrl, 'http://') || str_starts_with($mediaUrl, 'https://')) {
-            return $mediaUrl;
+            $candidateUrl = $mediaUrl;
+        } elseif ($localPath !== null) {
+            $relative = ltrim(str_replace(storage_path('app/public'), '', $localPath), DIRECTORY_SEPARATOR);
+            $relative = str_replace(DIRECTORY_SEPARATOR, '/', $relative);
+            $candidateUrl = rtrim(URL::to('/storage'), '/').'/'.ltrim($relative, '/');
         }
 
-        $local = str_replace(url('/storage'), storage_path('app/public'), $mediaUrl);
-        $local = str_replace(URL::to('/storage'), storage_path('app/public'), $local);
+        if ($candidateUrl === null && $localPath === null) {
+            return null;
+        }
 
-        if (is_file($local)) {
-            $relative = ltrim(str_replace(storage_path('app/public'), '', $local), DIRECTORY_SEPARATOR);
-            $relative = str_replace(DIRECTORY_SEPARATOR, '/', $relative);
+        $driver = (string) config('services.media_mirror.driver', 'catbox');
+        $needsMirror = $driver !== 'none' && $candidateUrl !== null && $this->urlNeedsMirror($candidateUrl);
 
-            return rtrim(URL::to('/storage'), '/').'/'.ltrim($relative, '/');
+        if (! $needsMirror) {
+            return $candidateUrl;
+        }
+
+        if ($localPath === null) {
+            $localPath = $this->downloadRemoteToTemp($candidateUrl, $job);
+        }
+        if ($localPath === null || ! is_file($localPath)) {
+            $this->writeLog($job, 'warning', 'Mirror skipped: local file unavailable for upload', ['stored_url' => $mediaUrl]);
+
+            return $candidateUrl;
+        }
+
+        $mirroredUrl = $this->mirrorToPublicHost($localPath, $kind, $job);
+        if ($mirroredUrl !== null) {
+            $this->writeLog($job, 'info', 'Mirrored media to public host for Instagram', [
+                'driver' => $driver,
+                'original' => $candidateUrl,
+                'mirrored' => $mirroredUrl,
+            ]);
+
+            return $mirroredUrl;
         }
 
         return null;
+    }
+
+    private function localPathForMediaUrl(string $mediaUrl): ?string
+    {
+        if ($mediaUrl === '') {
+            return null;
+        }
+        $candidates = [];
+
+        if (str_starts_with($mediaUrl, 'http://') || str_starts_with($mediaUrl, 'https://')) {
+            $path = parse_url($mediaUrl, PHP_URL_PATH);
+            if (is_string($path) && str_contains($path, '/storage/')) {
+                $relative = ltrim(substr($path, strpos($path, '/storage/') + strlen('/storage/')), '/');
+                $candidates[] = storage_path('app/public/'.str_replace('/', DIRECTORY_SEPARATOR, $relative));
+            }
+        } else {
+            $candidates[] = str_replace(url('/storage'), storage_path('app/public'), $mediaUrl);
+            $candidates[] = str_replace(URL::to('/storage'), storage_path('app/public'), $mediaUrl);
+        }
+
+        foreach ($candidates as $path) {
+            if (is_string($path) && is_file($path)) {
+                return $path;
+            }
+        }
+
+        return null;
+    }
+
+    private function urlNeedsMirror(string $url): bool
+    {
+        $host = (string) parse_url($url, PHP_URL_HOST);
+        if ($host === '') {
+            return false;
+        }
+        $host = strtolower($host);
+
+        $needles = (array) config('services.media_mirror.force_for_hosts', []);
+        foreach ($needles as $needle) {
+            $needle = strtolower(trim((string) $needle));
+            if ($needle === '') {
+                continue;
+            }
+            if (str_starts_with($needle, '.')) {
+                if (str_ends_with($host, $needle)) {
+                    return true;
+                }
+            } elseif ($host === $needle || str_ends_with($host, '.'.$needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function downloadRemoteToTemp(string $url, PublishJob $job): ?string
+    {
+        try {
+            $response = Http::timeout(60)
+                ->withHeaders(['ngrok-skip-browser-warning' => 'true'])
+                ->get($url);
+            if (! $response->successful()) {
+                $this->writeLog($job, 'warning', 'Could not pre-fetch media for mirroring', [
+                    'url' => $url,
+                    'status' => $response->status(),
+                ]);
+
+                return null;
+            }
+            $tmp = tempnam(sys_get_temp_dir(), 'igmedia_');
+            if ($tmp === false) {
+                return null;
+            }
+            file_put_contents($tmp, $response->body());
+
+            return $tmp;
+        } catch (Throwable $e) {
+            $this->writeLog($job, 'warning', 'Pre-fetch for mirror failed', ['url' => $url, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    private function mirrorToPublicHost(string $localPath, string $kind, PublishJob $job): ?string
+    {
+        $driver = (string) config('services.media_mirror.driver', 'catbox');
+
+        try {
+            return match ($driver) {
+                'catbox' => $this->uploadToCatbox($localPath, $job),
+                '0x0' => $this->uploadToZeroXZero($localPath, $job),
+                'imgbb' => $this->uploadToImgbb($localPath, $kind, $job),
+                'cloudinary' => $this->uploadToCloudinary($localPath, $kind, $job),
+                default => null,
+            };
+        } catch (Throwable $e) {
+            $this->writeLog($job, 'error', 'Public mirror upload failed', [
+                'driver' => $driver,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    private function uploadToCatbox(string $localPath, PublishJob $job): ?string
+    {
+        $response = Http::timeout(120)
+            ->attach('fileToUpload', fopen($localPath, 'r'), basename($localPath))
+            ->asMultipart()
+            ->post('https://catbox.moe/user/api.php', ['reqtype' => 'fileupload']);
+
+        $body = trim((string) $response->body());
+        if (! $response->successful() || ! str_starts_with($body, 'https://')) {
+            $this->writeLog($job, 'error', 'catbox.moe upload failed', ['status' => $response->status(), 'body' => mb_substr($body, 0, 500)]);
+
+            return null;
+        }
+
+        return $body;
+    }
+
+    private function uploadToZeroXZero(string $localPath, PublishJob $job): ?string
+    {
+        $response = Http::timeout(120)
+            ->attach('file', fopen($localPath, 'r'), basename($localPath))
+            ->asMultipart()
+            ->post('https://0x0.st');
+
+        $body = trim((string) $response->body());
+        if (! $response->successful() || ! str_starts_with($body, 'https://')) {
+            $this->writeLog($job, 'error', '0x0.st upload failed', ['status' => $response->status(), 'body' => mb_substr($body, 0, 500)]);
+
+            return null;
+        }
+
+        return $body;
+    }
+
+    private function uploadToImgbb(string $localPath, string $kind, PublishJob $job): ?string
+    {
+        if ($kind !== 'image') {
+            $this->writeLog($job, 'warning', 'imgbb mirror only supports images; falling back to catbox.', ['kind' => $kind]);
+
+            return $this->uploadToCatbox($localPath, $job);
+        }
+
+        $key = (string) config('services.media_mirror.imgbb_key', '');
+        if ($key === '') {
+            $this->writeLog($job, 'error', 'MEDIA_MIRROR_IMGBB_KEY is not set', []);
+
+            return null;
+        }
+
+        $response = Http::timeout(120)
+            ->asMultipart()
+            ->attach('image', fopen($localPath, 'r'), basename($localPath))
+            ->post('https://api.imgbb.com/1/upload?key='.$key);
+
+        if (! $response->successful()) {
+            $this->writeLog($job, 'error', 'imgbb upload failed', ['status' => $response->status(), 'body' => $response->body()]);
+
+            return null;
+        }
+
+        $url = $response->json('data.url') ?? $response->json('data.display_url');
+
+        return is_string($url) && $url !== '' ? $url : null;
+    }
+
+    private function uploadToCloudinary(string $localPath, string $kind, PublishJob $job): ?string
+    {
+        $cfg = (array) config('services.media_mirror.cloudinary', []);
+        $url = (string) ($cfg['url'] ?? '');
+        if ($url !== '') {
+            $parts = parse_url($url);
+            $cfg['cloud_name'] = $cfg['cloud_name'] ?: ($parts['host'] ?? null);
+            $cfg['api_key'] = $cfg['api_key'] ?: ($parts['user'] ?? null);
+            $cfg['api_secret'] = $cfg['api_secret'] ?: ($parts['pass'] ?? null);
+        }
+
+        $cloud = (string) ($cfg['cloud_name'] ?? '');
+        $key = (string) ($cfg['api_key'] ?? '');
+        $secret = (string) ($cfg['api_secret'] ?? '');
+        if ($cloud === '' || $key === '' || $secret === '') {
+            $this->writeLog($job, 'error', 'Cloudinary credentials not configured', []);
+
+            return null;
+        }
+
+        $resourceType = $kind === 'video' ? 'video' : 'image';
+        $timestamp = time();
+        $signature = sha1('timestamp='.$timestamp.$secret);
+
+        $response = Http::timeout(180)
+            ->asMultipart()
+            ->attach('file', fopen($localPath, 'r'), basename($localPath))
+            ->post("https://api.cloudinary.com/v1_1/{$cloud}/{$resourceType}/upload", [
+                'api_key' => $key,
+                'timestamp' => (string) $timestamp,
+                'signature' => $signature,
+            ]);
+
+        if (! $response->successful()) {
+            $this->writeLog($job, 'error', 'Cloudinary upload failed', ['status' => $response->status(), 'body' => $response->body()]);
+
+            return null;
+        }
+
+        $secureUrl = $response->json('secure_url') ?? $response->json('url');
+
+        return is_string($secureUrl) && $secureUrl !== '' ? $secureUrl : null;
+    }
+
+    private function extractGraphErrorMessage(mixed $json, string $rawBody): string
+    {
+        if (is_array($json)) {
+            $msg = $json['error']['message'] ?? null;
+            $type = $json['error']['type'] ?? null;
+            $code = $json['error']['code'] ?? null;
+            $sub = $json['error']['error_user_msg'] ?? null;
+            $parts = array_filter([
+                $msg ? (string) $msg : null,
+                $sub ? (string) $sub : null,
+                $code !== null ? '(code '.$code.($type ? ', '.$type : '').')' : null,
+            ]);
+            if ($parts !== []) {
+                return implode(' ', $parts);
+            }
+        }
+        $rawBody = trim($rawBody);
+
+        return $rawBody !== '' ? mb_substr($rawBody, 0, 500) : 'Instagram media creation failed.';
     }
 
     private function writeLog(PublishJob $job, string $level, string $message, ?array $response = null, ?int $httpStatus = null): void
