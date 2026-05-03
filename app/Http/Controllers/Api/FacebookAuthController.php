@@ -98,9 +98,16 @@ class FacebookAuthController extends Controller
                 return $toError('account_disabled');
             }
             $user->name = $name;
-            $user->email = $email;
-            $user->facebook_id = $fbId;
-            $user->facebook_access_token = $accessToken;
+            // ✅ Email sirf tab update karo jab user ke paas
+            // koi email nahi ya FB placeholder email hai
+            if (
+                !$user->email ||
+                str_contains($user->email, '@users.facebook.local')
+            ) {
+                $user->email = $email;
+            }
+            $user->facebook_id               = $fbId;
+            $user->facebook_access_token     = $accessToken;
             $user->facebook_token_expires_at = $expiresAt;
             if ($avatar) {
                 $user->avatar = $avatar;
