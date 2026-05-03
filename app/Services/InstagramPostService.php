@@ -279,7 +279,10 @@ class InstagramPostService
         }
 
         $driver = (string) config('services.media_mirror.driver', 'catbox');
-        $needsMirror = $driver !== 'none' && $candidateUrl !== null && $this->urlNeedsMirror($candidateUrl);
+        $hasLocalFile = $localPath !== null && is_file($localPath);
+        $alwaysMirrorLocal = (bool) config('services.media_mirror.always_mirror_local', false);
+        $needsMirror = $driver !== 'none' && $candidateUrl !== null
+            && ($this->urlNeedsMirror($candidateUrl) || ($hasLocalFile && $alwaysMirrorLocal));
 
         if (! $needsMirror) {
             return $candidateUrl;
@@ -343,7 +346,10 @@ class InstagramPostService
         }
         $host = strtolower($host);
 
-        $needles = (array) config('services.media_mirror.force_for_hosts', []);
+        $needles = array_merge(
+            (array) config('services.media_mirror.force_for_hosts', []),
+            (array) config('services.media_mirror.extra_force_hosts', []),
+        );
         foreach ($needles as $needle) {
             $needle = strtolower(trim((string) $needle));
             if ($needle === '') {
@@ -396,24 +402,52 @@ class InstagramPostService
 
     private function mirrorToPublicHost(string $localPath, string $kind, PublishJob $job): ?string
     {
-        $driver = (string) config('services.media_mirror.driver', 'catbox');
+        $primary = strtolower(trim((string) config('services.media_mirror.driver', 'catbox')));
+        foreach ($this->mirrorDriverAttempts($primary) as $driver) {
+            try {
+                $url = match ($driver) {
+                    'catbox' => $this->uploadToCatbox($localPath, $job),
+                    '0x0' => $this->uploadToZeroXZero($localPath, $job),
+                    'imgbb' => $this->uploadToImgbb($localPath, $kind, $job),
+                    'cloudinary' => $this->uploadToCloudinary($localPath, $kind, $job),
+                    default => null,
+                };
+                if (is_string($url) && $url !== '') {
+                    if ($driver !== $primary) {
+                        $this->writeLog($job, 'info', 'Media mirror used fallback driver', [
+                            'primary' => $primary,
+                            'used' => $driver,
+                        ]);
+                    }
 
-        try {
-            return match ($driver) {
-                'catbox' => $this->uploadToCatbox($localPath, $job),
-                '0x0' => $this->uploadToZeroXZero($localPath, $job),
-                'imgbb' => $this->uploadToImgbb($localPath, $kind, $job),
-                'cloudinary' => $this->uploadToCloudinary($localPath, $kind, $job),
-                default => null,
-            };
-        } catch (Throwable $e) {
-            $this->writeLog($job, 'error', 'Public mirror upload failed', [
-                'driver' => $driver,
-                'error' => $e->getMessage(),
-            ]);
-
-            return null;
+                    return $url;
+                }
+            } catch (Throwable $e) {
+                $this->writeLog($job, 'warning', 'Media mirror driver attempt failed', [
+                    'driver' => $driver,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
+
+        return null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function mirrorDriverAttempts(string $primary): array
+    {
+        $freeMirrors = ['catbox', '0x0'];
+
+        return match ($primary) {
+            'catbox' => ['catbox', '0x0'],
+            '0x0' => ['0x0', 'catbox'],
+            'imgbb' => ['imgbb', 'catbox', '0x0'],
+            'cloudinary' => ['cloudinary', 'catbox', '0x0'],
+            'none' => [],
+            default => $freeMirrors,
+        };
     }
 
     private function uploadToCatbox(string $localPath, PublishJob $job): ?string

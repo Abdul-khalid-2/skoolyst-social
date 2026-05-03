@@ -66,6 +66,10 @@ return [
     |   - "imgbb"      (requires MEDIA_MIRROR_IMGBB_KEY)
     |   - "cloudinary" (requires CLOUDINARY_URL or _CLOUD_NAME/_API_KEY/_API_SECRET)
     |   - "none"       (disable mirroring; send original URL as-is)
+    |
+    | Optional .env:
+    | - MEDIA_MIRROR_EXTRA_HOSTS=stagingsocial.skoolyst.com or https://stagingsocial.skoolyst.com (comma-separated)
+    | - MEDIA_MIRROR_ALWAYS_LOCAL=true (mirror whenever the file exists on this server)
     */
     'media_mirror' => [
         'driver' => env('MEDIA_MIRROR_DRIVER', 'catbox'),
@@ -76,10 +80,27 @@ return [
             'api_secret' => env('CLOUDINARY_API_SECRET'),
             'url' => env('CLOUDINARY_URL'),
         ],
+        'always_mirror_local' => filter_var(env('MEDIA_MIRROR_ALWAYS_LOCAL', false), FILTER_VALIDATE_BOOL),
         'force_for_hosts' => array_values(array_filter(array_map('trim', explode(
             ',',
             (string) env('MEDIA_MIRROR_FORCE_HOSTS', 'ngrok-free.dev,ngrok-free.app,ngrok.app,ngrok.io,localhost,127.0.0.1,.test,.local')
         )))),
+        'extra_force_hosts' => array_values(array_filter(array_map(
+            static function (string $raw): string {
+                $raw = trim($raw);
+                if ($raw === '') {
+                    return '';
+                }
+                if (str_contains($raw, '://')) {
+                    $host = parse_url($raw, PHP_URL_HOST);
+
+                    return is_string($host) && $host !== '' ? strtolower($host) : '';
+                }
+
+                return strtolower($raw);
+            },
+            array_map('trim', explode(',', (string) env('MEDIA_MIRROR_EXTRA_HOSTS', '')))
+        ))),
     ],
 
     /*
