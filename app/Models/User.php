@@ -31,6 +31,10 @@ class User extends Authenticatable
         'facebook_id',
         'facebook_access_token',
         'facebook_token_expires_at',
+        'linkedin_id',
+        'linkedin_access_token',
+        'linkedin_refresh_token',
+        'linkedin_token_expires_at',
     ];
 
     /**
@@ -42,6 +46,8 @@ class User extends Authenticatable
         'password',
         'remember_token',
         'facebook_access_token',
+        'linkedin_access_token',
+        'linkedin_refresh_token',
     ];
 
     /**
@@ -52,11 +58,14 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-            'is_active' => 'boolean',
-            'facebook_access_token' => 'encrypted',
-            'facebook_token_expires_at' => 'datetime',
+            'email_verified_at'          => 'datetime',
+            'password'                   => 'hashed',
+            'is_active'                  => 'boolean',
+            'facebook_access_token'      => 'encrypted',
+            'facebook_token_expires_at'  => 'datetime',
+            'linkedin_access_token'      => 'encrypted',
+            'linkedin_refresh_token'     => 'encrypted',
+            'linkedin_token_expires_at'  => 'datetime',
         ];
     }
 

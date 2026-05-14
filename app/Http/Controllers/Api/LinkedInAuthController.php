@@ -73,8 +73,8 @@ class LinkedInAuthController extends Controller
             $user = Auth::user();
 
             $user->linkedin_id = $liId;
-            $user->linkedin_access_token = encrypt($accessToken);
-            $user->linkedin_refresh_token = $refreshToken ? encrypt($refreshToken) : null;
+            $user->linkedin_access_token = $accessToken;
+            $user->linkedin_refresh_token = $refreshToken ?: null;
             $user->linkedin_token_expires_at = $expiresAt;
             if ($avatar) {
                 $user->avatar = $avatar;
@@ -83,17 +83,20 @@ class LinkedInAuthController extends Controller
 
             $workspace = $user->workspaces()->wherePivot('is_active', true)->first();
             if ($workspace) {
+                $decryptedAccessToken  = $user->linkedin_access_token;
+                $decryptedRefreshToken = $user->linkedin_refresh_token;
+
                 SocialAccountProvisioner::connectLinkedInForWorkspace(
                     $workspace,
                     $liId,
-                    decrypt($user->linkedin_access_token),
-                    $refreshToken ? decrypt($user->linkedin_refresh_token) : null,
+                    $decryptedAccessToken,
+                    $decryptedRefreshToken,
                     $expiresAt,
                     $name,
                     $avatar
                 );
 
-                $this->fetchLinkedInOrganizations($workspace, $liId, decrypt($user->linkedin_access_token), $expiresAt);
+                $this->fetchLinkedInOrganizations($workspace, $liId, $decryptedAccessToken, $expiresAt);
             }
 
             return redirect()->route('dashboard');
@@ -127,8 +130,8 @@ class LinkedInAuthController extends Controller
                 }
             }
             $user->linkedin_id = $liId;
-            $user->linkedin_access_token = encrypt($accessToken);
-            $user->linkedin_refresh_token = $refreshToken ? encrypt($refreshToken) : null;
+            $user->linkedin_access_token = $accessToken;
+            $user->linkedin_refresh_token = $refreshToken ?: null;
             $user->linkedin_token_expires_at = $expiresAt;
             if ($avatar) {
                 $user->avatar = $avatar;
@@ -141,8 +144,8 @@ class LinkedInAuthController extends Controller
                     'email' => $email,
                     'password' => Hash::make(Str::password(32)),
                     'linkedin_id' => $liId,
-                    'linkedin_access_token' => encrypt($accessToken),
-                    'linkedin_refresh_token' => $refreshToken ? encrypt($refreshToken) : null,
+                    'linkedin_access_token' => $accessToken,
+                    'linkedin_refresh_token' => $refreshToken ?: null,
                     'linkedin_token_expires_at' => $expiresAt,
                     'avatar' => $avatar,
                 ]);
@@ -175,17 +178,16 @@ class LinkedInAuthController extends Controller
             SocialAccountProvisioner::connectLinkedInForWorkspace(
                 $workspace,
                 $liId,
-                decrypt($user->linkedin_access_token),
-                $refreshToken ? decrypt($user->linkedin_refresh_token) : null,
+                $user->linkedin_access_token,
+                $user->linkedin_refresh_token,
                 $expiresAt,
                 $name,
                 $avatar
             );
 
-            $this->fetchLinkedInOrganizations($workspace, $liId, decrypt($user->linkedin_access_token), $expiresAt);
+            $this->fetchLinkedInOrganizations($workspace, $liId, $user->linkedin_access_token, $expiresAt);
         }
 
-        return redirect('/workspaces?connected=linkedin');
         return redirect()->route('dashboard');
     }
 

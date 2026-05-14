@@ -84,6 +84,43 @@ class FacebookAuthController extends Controller
 
         $avatar = $socialUser->getAvatar();
 
+        // ── If the user is already logged in, attach Facebook to their account ──
+        if (Auth::check()) {
+            /** @var \App\Models\User $user */
+            $user = Auth::user();
+
+            if ($user->is_active === false) {
+                return $toError('account_disabled');
+            }
+
+            $user->facebook_id               = $fbId;
+            $user->facebook_access_token     = $accessToken;
+            $user->facebook_token_expires_at = $expiresAt;
+            if ($avatar) {
+                $user->avatar = $avatar;
+            }
+            $user->save();
+
+            $workspace = $user->workspaces()
+                ->wherePivot('is_active', true)
+                ->orderBy('workspaces.id')
+                ->first();
+
+            if ($workspace) {
+                $connectedPages = SocialAccountProvisioner::connectFacebookPagesForWorkspace(
+                    $workspace, $fbId, $accessToken, $expiresAt
+                );
+                if ($connectedPages < 1) {
+                    SocialAccountProvisioner::connectFacebookOnlyForWorkspace(
+                        $workspace, $fbId, $accessToken, $expiresAt, $user->name
+                    );
+                }
+            }
+
+            return redirect()->route('dashboard');
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         $user = User::query()->where('facebook_id', $fbId)->first();
         if (! $user) {
             $byEmail = User::query()->where('email', $email)->first();
