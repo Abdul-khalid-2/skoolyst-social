@@ -13,10 +13,16 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
+          extensions: sqlite3, pdo_sqlite
+
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist
       - name: Copy .env
         run: cp .env.example .env && php artisan key:generate
+
+      - name: Run migrations
+        run: php artisan migrate --force
+
       - name: Run tests
         run: php artisan test
 
@@ -28,7 +34,8 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
+
       - name: Build assets
         run: |
           npm ci
@@ -67,7 +74,8 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
+
       - name: Build assets
         run: |
           npm ci
