@@ -36,12 +36,25 @@ return new class extends Migration
             }
         });
 
-        DB::statement("ALTER TABLE posts MODIFY status ENUM('draft','published','partial','failed','scheduled','publishing') NOT NULL DEFAULT 'draft'");
+        if (DB::connection()->getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE posts MODIFY status ENUM('draft','published','partial','failed','scheduled','publishing') NOT NULL DEFAULT 'draft'");
+        } else {
+            // SQLite / other drivers: rename column to string (no native ENUM)
+            Schema::table('posts', function (Blueprint $table) {
+                $table->string('status')->default('draft')->change();
+            });
+        }
     }
 
     public function down(): void
     {
-        DB::statement("ALTER TABLE posts MODIFY status ENUM('draft','scheduled','publishing','published','failed') NOT NULL DEFAULT 'draft'");
+        if (DB::connection()->getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE posts MODIFY status ENUM('draft','scheduled','publishing','published','failed') NOT NULL DEFAULT 'draft'");
+        } else {
+            Schema::table('posts', function (Blueprint $table) {
+                $table->string('status')->default('draft')->change();
+            });
+        }
 
         Schema::table('posts', function (Blueprint $table) {
             if (Schema::hasColumn('posts', 'ig_error')) {
