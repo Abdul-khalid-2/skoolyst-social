@@ -3,8 +3,8 @@
 namespace App\Services;
 
 use App\Models\SocialAccount;
-use GuzzleHttp\Client;
-use GuzzleHttp\Exception\GuzzleException;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class LinkedInPostService
@@ -25,16 +25,6 @@ class LinkedInPostService
         }
 
         try {
-            $client = new Client([
-                'base_uri' => self::LINKEDIN_API_BASE,
-                'timeout' => 30,
-                'headers' => [
-                    'Authorization' => "Bearer {$token}",
-                    'LinkedIn-Version' => self::LINKEDIN_VERSION,
-                    'Content-Type' => 'application/json',
-                ],
-            ]);
-
             $payload = [
                 'author' => $authorUrn,
                 'lifecycleState' => 'PUBLISHED',
@@ -64,11 +54,19 @@ class LinkedInPostService
                 $payload['specificContent']['com.linkedin.ugc.ShareContent']['shareMediaCategory'] = 'ARTICLE';
             }
 
-            $response = $client->post('ugcPosts', [
-                'json' => $payload,
-            ]);
+            $response = $this->client($token)->post(self::LINKEDIN_API_BASE.'ugcPosts', $payload);
 
-            $body = json_decode((string) $response->getBody(), true);
+            if (! $response->successful()) {
+                Log::error('LinkedIn publish failed', [
+                    'author' => $authorUrn,
+                    'status' => $response->status(),
+                    'response' => $response->body(),
+                ]);
+
+                return ['success' => false, 'error' => 'LinkedIn publish failed with status '.$response->status().'.'];
+            }
+
+            $body = $response->json();
 
             if (! is_array($body) || ! isset($body['id'])) {
                 Log::error('LinkedIn publish failed - missing post id', [
@@ -80,7 +78,7 @@ class LinkedInPostService
             }
 
             return ['success' => true, 'post_id' => (string) $body['id']];
-        } catch (GuzzleException $e) {
+        } catch (ConnectionException $e) {
             Log::error('LinkedIn publish failed', [
                 'error' => $e->getMessage(),
                 'author' => $authorUrn,
@@ -103,19 +101,9 @@ class LinkedInPostService
         }
 
         try {
-            $client = new Client([
-                'base_uri' => self::LINKEDIN_API_BASE,
-                'timeout' => 30,
-                'headers' => [
-                    'Authorization' => "Bearer {$token}",
-                    'LinkedIn-Version' => self::LINKEDIN_VERSION,
-                    'Content-Type' => 'application/json',
-                ],
-            ]);
-
-            // First, upload the asset
-            $uploadResponse = $client->post('assets?action=registerUpload', [
-                'json' => [
+            $uploadResponse = $this->client($token)->post(
+                self::LINKEDIN_API_BASE.'assets?action=registerUpload',
+                [
                     'registerUploadRequest' => [
                         'recipes' => ['urn:li:digitalmediaRecipe:feedshare-image'],
                         'owner' => $authorUrn,
@@ -126,10 +114,10 @@ class LinkedInPostService
                             ],
                         ],
                     ],
-                ],
-            ]);
+                ]
+            );
 
-            $uploadBody = json_decode((string) $uploadResponse->getBody(), true);
+            $uploadBody = $uploadResponse->json();
 
             if (! is_array($uploadBody) || ! isset($uploadBody['value']['uploadMechanism'])) {
                 Log::error('LinkedIn asset upload registration failed', ['response' => $uploadBody]);
@@ -140,37 +128,34 @@ class LinkedInPostService
             $uploadUrl = $uploadBody['value']['uploadMechanism']['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest']['uploadUrl'];
             $assetUrn = $uploadBody['value']['asset'];
 
-            // Upload the image
             $this->uploadImageToLinkedIn($uploadUrl, $imageUrl);
 
-            // Create the post with the asset
-            $payload = [
-                'author' => $authorUrn,
-                'lifecycleState' => 'PUBLISHED',
-                'specificContent' => [
-                    'com.linkedin.ugc.ShareContent' => [
-                        'shareCommentary' => [
-                            'text' => $text,
-                        ],
-                        'shareMediaCategory' => 'IMAGE',
-                        'media' => [
-                            [
-                                'status' => 'READY',
-                                'media' => $assetUrn,
+            $postResponse = $this->client($token)->post(
+                self::LINKEDIN_API_BASE.'ugcPosts',
+                [
+                    'author' => $authorUrn,
+                    'lifecycleState' => 'PUBLISHED',
+                    'specificContent' => [
+                        'com.linkedin.ugc.ShareContent' => [
+                            'shareCommentary' => [
+                                'text' => $text,
+                            ],
+                            'shareMediaCategory' => 'IMAGE',
+                            'media' => [
+                                [
+                                    'status' => 'READY',
+                                    'media' => $assetUrn,
+                                ],
                             ],
                         ],
                     ],
-                ],
-                'visibility' => [
-                    'com.linkedin.ugc.MemberNetworkVisibility' => 'PUBLIC',
-                ],
-            ];
+                    'visibility' => [
+                        'com.linkedin.ugc.MemberNetworkVisibility' => 'PUBLIC',
+                    ],
+                ]
+            );
 
-            $postResponse = $client->post('ugcPosts', [
-                'json' => $payload,
-            ]);
-
-            $postBody = json_decode((string) $postResponse->getBody(), true);
+            $postBody = $postResponse->json();
 
             if (! is_array($postBody) || ! isset($postBody['id'])) {
                 Log::error('LinkedIn image post failed - missing post id', [
@@ -182,7 +167,7 @@ class LinkedInPostService
             }
 
             return ['success' => true, 'post_id' => (string) $postBody['id']];
-        } catch (GuzzleException $e) {
+        } catch (ConnectionException $e) {
             Log::error('LinkedIn image publish failed', [
                 'error' => $e->getMessage(),
                 'author' => $authorUrn,
@@ -205,19 +190,9 @@ class LinkedInPostService
         }
 
         try {
-            $client = new Client([
-                'base_uri' => self::LINKEDIN_API_BASE,
-                'timeout' => 60,
-                'headers' => [
-                    'Authorization' => "Bearer {$token}",
-                    'LinkedIn-Version' => self::LINKEDIN_VERSION,
-                    'Content-Type' => 'application/json',
-                ],
-            ]);
-
-            // First, upload the asset
-            $uploadResponse = $client->post('assets?action=registerUpload', [
-                'json' => [
+            $uploadResponse = $this->client($token)->post(
+                self::LINKEDIN_API_BASE.'assets?action=registerUpload',
+                [
                     'registerUploadRequest' => [
                         'recipes' => ['urn:li:digitalmediaRecipe:feedshare-video'],
                         'owner' => $authorUrn,
@@ -228,10 +203,10 @@ class LinkedInPostService
                             ],
                         ],
                     ],
-                ],
-            ]);
+                ]
+            );
 
-            $uploadBody = json_decode((string) $uploadResponse->getBody(), true);
+            $uploadBody = $uploadResponse->json();
 
             if (! is_array($uploadBody) || ! isset($uploadBody['value']['uploadMechanism'])) {
                 Log::error('LinkedIn video upload registration failed', ['response' => $uploadBody]);
@@ -242,37 +217,34 @@ class LinkedInPostService
             $uploadUrl = $uploadBody['value']['uploadMechanism']['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest']['uploadUrl'];
             $assetUrn = $uploadBody['value']['asset'];
 
-            // Upload the video
             $this->uploadVideoToLinkedIn($uploadUrl, $videoUrl);
 
-            // Create the post with the asset
-            $payload = [
-                'author' => $authorUrn,
-                'lifecycleState' => 'PUBLISHED',
-                'specificContent' => [
-                    'com.linkedin.ugc.ShareContent' => [
-                        'shareCommentary' => [
-                            'text' => $text,
-                        ],
-                        'shareMediaCategory' => 'VIDEO',
-                        'media' => [
-                            [
-                                'status' => 'READY',
-                                'media' => $assetUrn,
+            $postResponse = $this->client($token)->post(
+                self::LINKEDIN_API_BASE.'ugcPosts',
+                [
+                    'author' => $authorUrn,
+                    'lifecycleState' => 'PUBLISHED',
+                    'specificContent' => [
+                        'com.linkedin.ugc.ShareContent' => [
+                            'shareCommentary' => [
+                                'text' => $text,
+                            ],
+                            'shareMediaCategory' => 'VIDEO',
+                            'media' => [
+                                [
+                                    'status' => 'READY',
+                                    'media' => $assetUrn,
+                                ],
                             ],
                         ],
                     ],
-                ],
-                'visibility' => [
-                    'com.linkedin.ugc.MemberNetworkVisibility' => 'PUBLIC',
-                ],
-            ];
+                    'visibility' => [
+                        'com.linkedin.ugc.MemberNetworkVisibility' => 'PUBLIC',
+                    ],
+                ]
+            );
 
-            $postResponse = $client->post('ugcPosts', [
-                'json' => $payload,
-            ]);
-
-            $postBody = json_decode((string) $postResponse->getBody(), true);
+            $postBody = $postResponse->json();
 
             if (! is_array($postBody) || ! isset($postBody['id'])) {
                 Log::error('LinkedIn video post failed - missing post id', [
@@ -284,7 +256,7 @@ class LinkedInPostService
             }
 
             return ['success' => true, 'post_id' => (string) $postBody['id']];
-        } catch (GuzzleException $e) {
+        } catch (ConnectionException $e) {
             Log::error('LinkedIn video publish failed', [
                 'error' => $e->getMessage(),
                 'author' => $authorUrn,
@@ -292,6 +264,15 @@ class LinkedInPostService
 
             return ['success' => false, 'error' => $e->getMessage()];
         }
+    }
+
+    private function client(string $token): \Illuminate\Http\Client\PendingRequest
+    {
+        return Http::withHeaders([
+            'Authorization' => "Bearer {$token}",
+            'LinkedIn-Version' => self::LINKEDIN_VERSION,
+            'Content-Type' => 'application/json',
+        ]);
     }
 
     private function uploadImageToLinkedIn(string $uploadUrl, string $imageUrl): void
@@ -302,13 +283,9 @@ class LinkedInPostService
             throw new \RuntimeException('Image file not found: '.$path);
         }
 
-        $client = new Client(['timeout' => 60]);
-        $client->put($uploadUrl, [
-            'body' => fopen($path, 'r'),
-            'headers' => [
-                'Content-Type' => 'image/jpeg',
-            ],
-        ]);
+        Http::withBody(fopen($path, 'r'), 'image/jpeg')
+            ->withoutRedirecting()
+            ->put($uploadUrl);
     }
 
     private function uploadVideoToLinkedIn(string $uploadUrl, string $videoUrl): void
@@ -319,13 +296,9 @@ class LinkedInPostService
             throw new \RuntimeException('Video file not found: '.$path);
         }
 
-        $client = new Client(['timeout' => 600]);
-        $client->put($uploadUrl, [
-            'body' => fopen($path, 'r'),
-            'headers' => [
-                'Content-Type' => 'video/mp4',
-            ],
-        ]);
+        Http::withBody(fopen($path, 'r'), 'video/mp4')
+            ->withoutRedirecting()
+            ->put($uploadUrl);
     }
 
     private function resolveAuthorUrn(SocialAccount $account): string

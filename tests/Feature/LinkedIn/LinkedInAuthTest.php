@@ -114,7 +114,7 @@ class LinkedInAuthTest extends TestCase
 
         $accounts = SocialAccount::query()
             ->where('workspace_id', $workspace->id)
-            ->whereHas('socialPlatform', fn ($q) => $q->where('slug', 'linkedin'))
+            ->whereHas('platform', fn ($q) => $q->where('slug', 'linkedin'))
             ->get();
 
         $this->assertEquals(2, $accounts->count());
