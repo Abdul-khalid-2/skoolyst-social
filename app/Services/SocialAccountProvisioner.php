@@ -390,4 +390,103 @@ class SocialAccountProvisioner
             ],
         );
     }
+
+    public static function connectLinkedInForWorkspace(
+        Workspace $workspace,
+        string $linkedInUserId,
+        string $accessToken,
+        ?string $refreshToken = null,
+        ?\Illuminate\Support\Carbon $expiresAt = null,
+        ?string $displayName = null,
+        ?string $avatarUrl = null,
+        ?string $vanityName = null,
+        int $followersCount = 0
+    ): SocialAccount {
+        $linkedin = SocialPlatform::query()
+            ->where('slug', 'linkedin')
+            ->where('is_active', true)
+            ->first();
+
+        if (! $linkedin) {
+            throw new \RuntimeException('LinkedIn platform not found.');
+        }
+
+        $memberUrn = 'urn:li:person:'.$linkedInUserId;
+
+        return SocialAccount::query()->updateOrCreate(
+            [
+                'workspace_id' => $workspace->id,
+                'social_platform_id' => $linkedin->id,
+                'platform_user_id' => $linkedInUserId,
+            ],
+            [
+                'platform_page_id' => null,
+                'account_name' => $displayName ?: 'LinkedIn Profile',
+                'account_handle' => $vanityName ?: $linkedInUserId,
+                'avatar' => self::shortUrl($avatarUrl),
+                'access_token' => encrypt($accessToken),
+                'refresh_token' => $refreshToken ? encrypt($refreshToken) : null,
+                'token_expires_at' => $expiresAt,
+                'followers_count' => $followersCount,
+                'fan_count' => 0,
+                'following_count' => 0,
+                'posts_count' => 0,
+                'is_connected' => true,
+                'meta' => [
+                    'li_member_id' => $memberUrn,
+                    'li_account_type' => 'person',
+                    'li_vanity_name' => $vanityName,
+                ],
+            ],
+        );
+    }
+
+    public static function connectLinkedInOrganizationForWorkspace(
+        Workspace $workspace,
+        string $linkedInUserId,
+        string $organizationId,
+        string $accessToken,
+        ?string $refreshToken = null,
+        ?\Illuminate\Support\Carbon $expiresAt = null,
+        ?string $organizationName = null,
+        ?string $avatarUrl = null
+    ): SocialAccount {
+        $linkedin = SocialPlatform::query()
+            ->where('slug', 'linkedin')
+            ->where('is_active', true)
+            ->first();
+
+        if (! $linkedin) {
+            throw new \RuntimeException('LinkedIn platform not found.');
+        }
+
+        $organizationUrn = 'urn:li:organization:'.$organizationId;
+
+        return SocialAccount::query()->updateOrCreate(
+            [
+                'workspace_id' => $workspace->id,
+                'social_platform_id' => $linkedin->id,
+                'platform_page_id' => $organizationId,
+            ],
+            [
+                'platform_user_id' => $linkedInUserId,
+                'account_name' => $organizationName ?: 'LinkedIn Organization',
+                'account_handle' => $organizationId,
+                'avatar' => self::shortUrl($avatarUrl),
+                'access_token' => encrypt($accessToken),
+                'refresh_token' => $refreshToken ? encrypt($refreshToken) : null,
+                'token_expires_at' => $expiresAt,
+                'followers_count' => 0,
+                'fan_count' => 0,
+                'following_count' => 0,
+                'posts_count' => 0,
+                'is_connected' => true,
+                'meta' => [
+                    'li_member_id' => $organizationUrn,
+                    'li_account_type' => 'organization',
+                    'li_organization_id' => $organizationId,
+                ],
+            ],
+        );
+    }
 }

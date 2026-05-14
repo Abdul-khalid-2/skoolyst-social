@@ -187,8 +187,8 @@
 
                             <p class="text-center text-sm text-gray-600 mb-6">
                                 @if ($platform->slug === 'instagram')
-                                    {{ __('Instagram Business accounts are linked through Meta. You’ll continue with Facebook login — approve Pages — and any Instagram Professional accounts linked to those Pages will appear here.') }}
-                                @else
+                                    {{ __('Instagram Business accounts are linked through Meta. You’ll continue with Facebook login — approve Pages — and any Instagram Professional accounts linked to those Pages will appear here.') }}                                @elseif ($platform->slug === 'linkedin')
+                                    {{ __('You will be redirected to LinkedIn to authorize Skoolyst Social AI to post on your behalf. Personal profile and organization pages you administer will be available for publishing.') }}                                @else
                                     {{ __('You will be redirected to :name to authorize Skoolyst Social AI to post on your behalf.', ['name' => $platform->name]) }}
                                 @endif
                             </p>
@@ -201,10 +201,16 @@
                                 >
                                     {{ __('Cancel') }}
                                 </button>
-                                @if (in_array($platform->slug, ['facebook', 'instagram'], true))
+                                @if (in_array($platform->slug, ['facebook', 'instagram', 'linkedin'], true))
                                     {{-- Instagram Business uses the same Meta Facebook Login flow; IG accounts are linked after Pages are authorized. --}}
                                     <a
-                                        href="{{ route('api.auth.facebook.redirect') }}"
+                                        href="
+                                            @if ($platform->slug === 'linkedin')
+                                                {{ route('api.auth.linkedin.redirect') }}
+                                            @else
+                                                {{ route('api.auth.facebook.redirect') }}
+                                            @endif
+                                        "
                                         class="flex-1 text-center text-white rounded-xl py-2.5 text-sm font-semibold active:scale-95 transition-all"
                                         style="background: {{ $gradStyle }}"
                                     >
@@ -246,10 +252,10 @@
                     </button>
                 </div>
                 <ul class="text-sm text-gray-700 space-y-2">
-                    <li>{{ __('1) Use Connect on Facebook or Instagram — both use the same Meta (Facebook) sign-in.') }}</li>
-                    <li>{{ __('2) Approve Page access; Instagram Business accounts linked to those Pages are saved automatically.') }}</li>
-                    <li>{{ __('3) Then Create Post can publish to connected Facebook Pages and Instagram accounts.') }}</li>
-                    <li>{{ __('4) Other platforms stay disabled until their OAuth flow is added.') }}</li>
+                    <li>{{ __('1) Use Connect on Facebook, Instagram, or LinkedIn — each uses its own OAuth login.') }}</li>
+                    <li>{{ __('2) For Facebook: approve Page access; Instagram Business accounts linked to those Pages are saved automatically.') }}</li>
+                    <li>{{ __('3) For LinkedIn: approve personal profile and/or organization pages you administer.') }}</li>
+                    <li>{{ __('4) Then Create Post can publish to all connected accounts.') }}</li>
                 </ul>
             </div>
         </div>

@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Post;
 use App\Services\InstagramPostService;
+use App\Services\LinkedInPostService;
 use App\Services\SocialPostService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +16,7 @@ class PublishScheduledPosts extends Command
 
     protected $description = 'Publish posts that are scheduled for the current time or earlier.';
 
-    public function handle(SocialPostService $socialPostService, InstagramPostService $instagramPostService): int
+    public function handle(SocialPostService $socialPostService, InstagramPostService $instagramPostService, LinkedInPostService $linkedInPostService): int
     {
         $processed = 0;
 
@@ -51,7 +52,7 @@ class PublishScheduledPosts extends Command
             $this->info("Publishing Post ID: {$post->id}");
 
             try {
-                $this->publishSingleScheduledPost($post, $socialPostService, $instagramPostService);
+                $this->publishSingleScheduledPost($post, $socialPostService, $instagramPostService, $linkedInPostService);
             } catch (Throwable $e) {
                 report($e);
                 $post->refresh();
@@ -73,7 +74,7 @@ class PublishScheduledPosts extends Command
         return self::SUCCESS;
     }
 
-    private function publishSingleScheduledPost(Post $post, SocialPostService $socialPostService, InstagramPostService $instagramPostService): void
+    private function publishSingleScheduledPost(Post $post, SocialPostService $socialPostService, InstagramPostService $instagramPostService, LinkedInPostService $linkedInPostService): void
     {
         $maxExec = (int) config('services.social_publish.max_execution_seconds', 600);
         if ($maxExec > 0) {
@@ -91,11 +92,11 @@ class PublishScheduledPosts extends Command
         foreach ($post->postTargets as $target) {
             $platform = $target->socialPlatform?->slug;
 
-            if (! in_array($platform, ['facebook', 'instagram'], true)) {
+            if (! in_array($platform, ['facebook', 'instagram', 'linkedin'], true)) {
                 $skipped++;
                 $target->update([
                     'status' => 'skipped',
-                    'error_message' => __('Publishing is enabled for Facebook and Instagram only.'),
+                    'error_message' => __('This platform is not supported yet.'),
                 ]);
 
                 continue;
@@ -169,6 +170,35 @@ class PublishScheduledPosts extends Command
                     'error_message' => $error,
                 ]);
                 $post->ig_error = $error;
+
+                continue;
+            }
+
+            if ($platform === 'linkedin') {
+                $result = $this->publishToLinkedIn($linkedInPostService, $target->socialAccount, $post, $mediaUrl, $mediaType);
+
+                if (($result['success'] ?? false) === true) {
+                    $published++;
+                    $target->update([
+                        'status' => 'published',
+                        'platform_post_id' => $result['post_id'] ?? null,
+                        'published_at' => now(),
+                        'error_message' => null,
+                    ]);
+                    $post->li_post_id = $result['post_id'] ?? null;
+
+                    continue;
+                }
+
+                $failed++;
+                $error = (string) ($result['error'] ?? 'LinkedIn publish failed.');
+                $target->update([
+                    'status' => 'failed',
+                    'error_message' => $error,
+                ]);
+                $post->li_error = $error;
+
+                continue;
             }
         }
 
@@ -179,5 +209,18 @@ class PublishScheduledPosts extends Command
         };
         $post->published_at = $published > 0 ? now() : null;
         $post->save();
+    }
+
+    private function publishToLinkedIn(\App\Services\LinkedInPostService $linkedInPostService, \App\Models\SocialAccount $account, Post $post, ?string $mediaUrl, ?string $mediaType): array
+    {
+        if ($mediaType === 'video') {
+            return $linkedInPostService->publishVideoPost($account, $post->caption, $mediaUrl ?? '');
+        }
+
+        if ($mediaType === 'image' || $mediaType === 'gif') {
+            return $linkedInPostService->publishImagePost($account, $post->caption, $mediaUrl ?? '');
+        }
+
+        return $linkedInPostService->publishTextPost($account, $post->caption);
     }
 }

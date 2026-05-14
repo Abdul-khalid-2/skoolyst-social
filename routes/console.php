@@ -9,5 +9,6 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('tokens:check-expiry')->daily();
+Schedule::command('linkedin:refresh-tokens')->daily();
 // Note: do not use withoutOverlapping() here — Facebook calls can exceed 1 minute and would skip the next run.
 Schedule::command('posts:publish-scheduled')->everyMinute();

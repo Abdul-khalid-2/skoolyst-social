@@ -103,6 +103,18 @@ return [
         ))),
     ],
 
+
+    'linkedin' => [
+        'client_id' => env('LINKEDIN_CLIENT_ID'),
+        'client_secret' => env('LINKEDIN_CLIENT_SECRET'),
+        'redirect' => env('LINKEDIN_REDIRECT_URI'),
+    ],
+
+    'linkedin-openid' => [
+        'client_id'     => env('LINKEDIN_CLIENT_ID'),
+        'client_secret' => env('LINKEDIN_CLIENT_SECRET'),
+        'redirect'      => env('LINKEDIN_REDIRECT_URI'),
+    ],
     /*
     | Facebook video upload + Instagram container polling can exceed PHP's default
     | max_execution_time (often 60s). Web requests use set_time_limit() before publishing.
