@@ -18,22 +18,24 @@ class LinkedInAuthTest extends TestCase
     {
         parent::setUp();
 
-        // Seed LinkedIn platform
-        SocialPlatform::query()->create([
-            'name' => 'LinkedIn',
-            'slug' => 'linkedin',
-            'icon' => 'linkedin',
-            'color' => '#0A66C2',
-            'is_active' => true,
-            'supports_scheduling' => true,
-            'supports_media' => true,
-            'character_limit' => 3000,
-            'connection_options' => json_encode([
-                'oauth_flow' => 'oauth2',
-                'supports_pages' => true,
-                'supports_personal' => true,
-            ]),
-        ]);
+        // Ensure LinkedIn platform exists (migration may have already inserted it)
+        SocialPlatform::firstOrCreate(
+            ['slug' => 'linkedin'],
+            [
+                'name' => 'LinkedIn',
+                'icon' => 'linkedin',
+                'color' => '#0A66C2',
+                'is_active' => true,
+                'supports_scheduling' => true,
+                'supports_media' => true,
+                'character_limit' => 3000,
+                'connection_options' => json_encode([
+                    'oauth_flow' => 'oauth2',
+                    'supports_pages' => true,
+                    'supports_personal' => true,
+                ]),
+            ]
+        );
     }
 
     public function test_connect_linkedin_for_workspace(): void

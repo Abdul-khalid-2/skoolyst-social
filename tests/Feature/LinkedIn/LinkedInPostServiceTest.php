@@ -24,17 +24,19 @@ class LinkedInPostServiceTest extends TestCase
 
         $this->service = app(LinkedInPostService::class);
 
-        // Seed LinkedIn platform
-        $linkedin = SocialPlatform::query()->create([
-            'name' => 'LinkedIn',
-            'slug' => 'linkedin',
-            'icon' => 'linkedin',
-            'color' => '#0A66C2',
-            'is_active' => true,
-            'supports_scheduling' => true,
-            'supports_media' => true,
-            'character_limit' => 3000,
-        ]);
+        // Ensure LinkedIn platform exists (migration may have already inserted it)
+        $linkedin = SocialPlatform::firstOrCreate(
+            ['slug' => 'linkedin'],
+            [
+                'name' => 'LinkedIn',
+                'icon' => 'linkedin',
+                'color' => '#0A66C2',
+                'is_active' => true,
+                'supports_scheduling' => true,
+                'supports_media' => true,
+                'character_limit' => 3000,
+            ]
+        );
 
         $this->workspace = Workspace::factory()->create();
 
