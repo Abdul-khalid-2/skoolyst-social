@@ -145,6 +145,16 @@
                                 </td>
                                 <td class="px-4 py-3.5">
                                     <div class="flex items-center justify-end gap-1">
+                                        <a
+                                            href="{{ route('posts.scheduled.edit', $post) }}"
+                                            class="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                                            title="{{ __('Edit') }}"
+                                        >
+                                            <svg class="w-[14px] h-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke-linecap="round" stroke-linejoin="round"/>
+                                                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke-linecap="round" stroke-linejoin="round"/>
+                                            </svg>
+                                        </a>
                                         <form
                                             action="{{ route('posts.destroy', $post) }}"
                                             method="post"

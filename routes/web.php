@@ -36,6 +36,8 @@ Route::middleware(['auth', 'workspace.context'])->group(function (): void {
     Route::get('create', [CreatePostController::class, 'index'])->name('create');
     Route::get('posts', [PostsController::class, 'index'])->name('posts.index');
     Route::get('scheduled', [PostsController::class, 'scheduled'])->name('posts.scheduled');
+    Route::get('scheduled/{post}/edit', [PostsController::class, 'editScheduled'])->name('posts.scheduled.edit');
+    Route::post('scheduled/{post}', [PostsController::class, 'updateScheduled'])->name('posts.scheduled.update');
     Route::delete('posts/{post}', [PostsController::class, 'destroy'])->name('posts.destroy');
     Route::get('accounts', [AccountsController::class, 'index'])->name('accounts');
     Route::delete('accounts/connections/{account}', [AccountsController::class, 'destroyConnection'])->name('accounts.connections.destroy');

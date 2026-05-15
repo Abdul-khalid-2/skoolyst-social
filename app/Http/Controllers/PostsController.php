@@ -41,6 +41,45 @@ class PostsController extends Controller
         ]));
     }
 
+    public function editScheduled(Request $request, Post $post): View|RedirectResponse
+    {
+        $workspace = $this->postListing->resolveWorkspaceForUser($request->user());
+        if (! $workspace || $post->workspace_id !== $workspace->id) {
+            abort(404);
+        }
+
+        $post->load(['postMedia', 'postTargets.socialPlatform']);
+
+        return view('posts.scheduled-edit', [
+            'title'       => 'Edit Scheduled Post',
+            'description' => 'Update your scheduled post caption or reschedule.',
+            'post'        => $post,
+            'workspace'   => $workspace,
+        ]);
+    }
+
+    public function updateScheduled(Request $request, Post $post): RedirectResponse
+    {
+        $workspace = $this->postListing->resolveWorkspaceForUser($request->user());
+        if (! $workspace || $post->workspace_id !== $workspace->id) {
+            abort(404);
+        }
+
+        $validated = $request->validate([
+            'caption'      => ['required', 'string', 'min:1', 'max:2200'],
+            'scheduled_at' => ['required', 'date', 'after:now'],
+        ]);
+
+        $post->caption      = $validated['caption'];
+        $post->scheduled_at = \Carbon\Carbon::parse($validated['scheduled_at']);
+        $post->status       = 'scheduled';
+        $post->save();
+
+        return redirect()
+            ->route('posts.scheduled')
+            ->with('success', __('Scheduled post updated.'));
+    }
+
     public function destroy(Request $request, Post $post): RedirectResponse
     {
         $this->postListing->deleteForUser($request->user(), $post);
