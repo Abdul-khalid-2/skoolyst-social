@@ -63,7 +63,7 @@ class SettingsController extends Controller
         }
 
         return redirect()
-            ->route('privacy.data-deletion', ['code' => $code])
+            ->route('data-deletion', ['code' => $code])
             ->with('success', __('Facebook-connected data has been removed from your account.'));
     }
 }

@@ -5,6 +5,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CreatePostController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FacebookDataDeletionController;
+use App\Http\Controllers\LegalController;
 use App\Http\Controllers\PostsController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SettingsController;
@@ -16,8 +17,10 @@ Route::get('/', function () {
     return redirect()->route('dashboard');
 });
 
-Route::get('/privacy/data-deletion', [FacebookDataDeletionController::class, 'show'])
-    ->name('privacy.data-deletion');
+Route::get('/privacy', [LegalController::class, 'privacy'])->name('legal.privacy');
+Route::get('/terms', [LegalController::class, 'terms'])->name('legal.terms');
+Route::get('/data-deletion', [FacebookDataDeletionController::class, 'show'])->name('data-deletion');
+Route::redirect('/privacy/data-deletion', '/data-deletion', 301);
 
 Route::middleware('guest')->group(function (): void {
     Route::get('login', [AuthController::class, 'showLogin'])->name('login');

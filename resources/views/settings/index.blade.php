@@ -566,7 +566,7 @@
                                 Open Accounts
                             </a>
                             <p class="mt-4 text-xs text-gray-500">
-                                <a href="{{ route('privacy.data-deletion') }}" class="text-blue-600 hover:underline">User data deletion (Facebook / Instagram)</a>
+                                <a href="{{ route('data-deletion') }}" class="text-blue-600 hover:underline">User data deletion (Facebook / Instagram)</a>
                             </p>
                             @if ($user->facebook_id)
                                 <div class="mt-6 rounded-xl border border-amber-200 bg-amber-50/90 p-4">

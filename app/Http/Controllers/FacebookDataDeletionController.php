@@ -16,9 +16,14 @@ class FacebookDataDeletionController extends Controller
 
     public function show(Request $request): View
     {
-        return view('privacy.data-deletion', [
+        return view('legal.data-deletion', [
             'code' => $request->query('code'),
-            'metaCallbackUrl' => route('api.auth.facebook.data-deletion'),
+            'metaCallbackUrl' => route('api.auth.facebook.data-deletion', [], true),
+            'lastUpdated' => 'May 15, 2026',
+            'businessName' => 'Skoolyst App',
+            'productName' => 'Skoolyst Social',
+            'contactEmail' => 'abdulkhalidmasood@gmail.com',
+            'appUrl' => rtrim((string) config('app.url'), '/'),
         ]);
     }
 
@@ -39,7 +44,7 @@ class FacebookDataDeletionController extends Controller
 
         $confirmationCode = $this->facebookDataDeletion->purgeForFacebookUserId($facebookUserId);
 
-        $statusUrl = route('privacy.data-deletion', [
+        $statusUrl = route('data-deletion', [
             'code' => $confirmationCode,
         ], true);
 
