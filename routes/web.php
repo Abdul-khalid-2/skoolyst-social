@@ -49,7 +49,7 @@ Route::middleware(['auth', 'workspace.context'])->group(function (): void {
     Route::put('profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
     Route::view('switch-account', 'workspaces.switch');
-    Route::view('notifications', 'notifications.index');
+    Route::get('notifications', [\App\Http\Controllers\NotificationsController::class, 'index'])->name('notifications');
     Route::get('activity', [\App\Http\Controllers\ActivityController::class, 'index'])->name('activity');
 });
 

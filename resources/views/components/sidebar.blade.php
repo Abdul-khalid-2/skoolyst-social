@@ -15,6 +15,7 @@
         ['path' => '/accounts', 'match' => 'accounts', 'label' => 'Accounts', 'icon' => 'accounts'],
         ['path' => '/analytics', 'match' => 'analytics', 'label' => 'Analytics', 'icon' => 'analytics'],
         ['path' => '/activity', 'match' => 'activity', 'label' => 'Activity', 'icon' => 'activity'],
+        ['path' => '/notifications', 'match' => 'notifications', 'label' => 'Notifications', 'icon' => 'notifications'],
         ['path' => '/settings', 'match' => 'settings', 'label' => 'Settings', 'icon' => 'settings'],
     ];
 @endphp
