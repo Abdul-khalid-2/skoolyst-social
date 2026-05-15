@@ -1,68 +1,47 @@
+@php use Illuminate\Support\Str; @endphp
+
 @extends('layouts.app', [
-    'title' => 'Analytics',
-    'description' => 'Performance and engagement metrics.',
-    'subtitle' => null,
+    'title'       => $title ?? 'Analytics',
+    'description' => $description ?? 'Performance and engagement metrics.',
+    'subtitle'    => null,
 ])
 
 @php
-    $platformPosts = [
-        (object) ['name' => 'Facebook', 'posts' => 28, 'color' => 'bg-blue-500'],
-        (object) ['name' => 'Instagram', 'posts' => 15, 'color' => 'bg-pink-500'],
-        (object) ['name' => 'LinkedIn', 'posts' => 8, 'color' => 'bg-indigo-500'],
-        (object) ['name' => 'Twitter', 'posts' => 12, 'color' => 'bg-gray-700'],
-    ];
-    $engagementData = [1200, 1850, 1400, 2100, 1950, 2400, 2200];
-    $dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    $min = min($engagementData);
-    $max = max($engagementData);
-    $xStart = 30;
-    $xEnd = 400;
-    $xStep = ($xEnd - $xStart) / (count($engagementData) - 1);
+    $engagementData = $engagementData ?? [];
+    $dayLabels      = $dayLabels ?? [];
+    $min    = count($engagementData) ? min($engagementData) : 0;
+    $max    = count($engagementData) ? max($engagementData) : 1;
+    $xStart = 30; $xEnd = 400;
+    $xStep  = count($engagementData) > 1 ? ($xEnd - $xStart) / (count($engagementData) - 1) : 0;
     $points = [];
-    foreach ($engagementData as $index => $value) {
-        $x = $xStart + $index * $xStep;
-        $normalized = ($value - $min) / (max(1, $max - $min));
+    foreach ($engagementData as $i => $value) {
+        $x = $xStart + $i * $xStep;
+        $normalized = $max > $min ? ($value - $min) / ($max - $min) : 0.5;
         $y = 100 - $normalized * 90 + 10;
-        $points[] = (object) ['x' => $x, 'y' => $y, 'value' => $value, 'day' => $dayLabels[$index]];
+        $points[] = (object) ['x' => $x, 'y' => $y, 'value' => $value, 'day' => $dayLabels[$i] ?? ''];
     }
-    $polyline = collect($points)->map(fn ($p) => $p->x.','.$p->y)->join(' ');
+    $polyline    = collect($points)->map(fn ($p) => $p->x.','.$p->y)->join(' ');
     $guideValues = collect([0.25, 0.5, 0.75])->map(fn ($f) => (object) [
-        'y' => 10 + 90 * $f,
+        'y'     => 10 + 90 * $f,
         'value' => (int) round($max - ($max - $min) * $f),
     ]);
-    $heatmapRows = [
-        (object) ['label' => 'Morning', 'values' => [2, 1, 2, 1]],
-        (object) ['label' => 'Afternoon', 'values' => [1, 2, 1, 2]],
-        (object) ['label' => 'Evening', 'values' => [2, 2, 1, 2]],
-    ];
     $heatColor = function (int $level): string {
-        if ($level === 2) {
-            return 'bg-blue-500';
-        }
-        if ($level === 1) {
-            return 'bg-blue-200';
-        }
-
-        return 'bg-gray-100';
+        return match ($level) { 2 => 'bg-blue-500', 1 => 'bg-blue-200', default => 'bg-gray-100' };
     };
+    $maxPlatformPosts = max(1, collect($platformPosts ?? [])->max('posts') ?? 1);
 @endphp
 
 @section('content')
     <div class="p-6 space-y-6">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            @foreach ([
-        (object) ['label' => 'Total Reach', 'value' => '284K', 'delta' => '+18.4%', 'up' => true],
-        (object) ['label' => 'Engagements', 'value' => '14,820', 'delta' => '+11.2%', 'up' => true],
-        (object) ['label' => 'Posts Published', 'value' => '47', 'delta' => '+3 this month', 'up' => true],
-        (object) ['label' => 'Avg Engagement Rate', 'value' => '5.2%', 'delta' => '+0.8%', 'up' => true],
-    ] as $kpi)
+            @foreach ($kpis as $kpi)
                 <x-card
                     class="!shadow-sm hover:shadow-md transition-shadow duration-200"
                     padding="!p-4"
                 >
-                    <p class="text-xs text-gray-500 uppercase tracking-wide">{{ $kpi->label }}</p>
-                    <p class="text-2xl font-bold text-gray-900 mt-1">{{ $kpi->value }}</p>
-                    <p class="text-xs font-semibold mt-1 {{ $kpi->up ? 'text-emerald-600' : 'text-red-500' }}">{{ $kpi->delta }}</p>
+                    <p class="text-xs text-gray-500 uppercase tracking-wide">{{ $kpi['label'] }}</p>
+                    <p class="text-2xl font-bold text-gray-900 mt-1">{{ $kpi['value'] }}</p>
+                    <p class="text-xs font-semibold mt-1 {{ $kpi['up'] ? 'text-emerald-600' : 'text-red-500' }}">{{ $kpi['delta'] }}</p>
                 </x-card>
             @endforeach
         </div>
@@ -81,7 +60,7 @@
                                 <div class="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
                                     <div
                                         class="h-full rounded-full transition-all duration-700 {{ $item->color }}"
-                                        style="width: {{ (int) ($item->posts / 28 * 100) }}%"
+                                        style="width: {{ (int) ($item->posts / $maxPlatformPosts * 100) }}%"
                                     ></div>
                                 </div>
                                 <span class="text-xs text-gray-600 font-semibold w-8 text-right shrink-0">{{ $item->posts }}</span>
@@ -137,14 +116,25 @@
             <div class="xl:col-span-1 space-y-5">
                 <x-card class="!shadow-sm hover:shadow-md transition-shadow duration-200">
                     <h3 class="text-sm font-semibold text-gray-900 mb-3">Top Performing Post</h3>
-                    <div class="flex gap-3">
-                        <div class="w-16 h-16 bg-gray-100 rounded-lg shrink-0" role="img" aria-hidden="true"></div>
-                        <p class="text-xs text-gray-700 line-clamp-3">
-                            Excited to announce our new React course! Join us for a deep dive into modern development patterns and
-                            practical workflows...
-                        </p>
-                    </div>
-                    <span class="inline-flex mt-3 bg-blue-100 text-blue-700 rounded-full px-2.5 py-1 text-xs">Facebook</span>
+
+                    @if ($topPost)
+                        <div class="flex gap-3">
+                            @php $img = $topPost->postMedia->first()?->url; @endphp
+                            @if ($img)
+                                <img src="{{ $img }}" alt="" class="w-16 h-16 rounded-lg object-cover shrink-0 border border-gray-100" />
+                            @else
+                                <div class="w-16 h-16 bg-gray-100 rounded-lg shrink-0" role="img" aria-hidden="true"></div>
+                            @endif
+                            <p class="text-xs text-gray-700 line-clamp-3">{{ Str::limit($topPost->caption ?? '', 140) }}</p>
+                        </div>
+                        @foreach ($topPost->postTargets as $t)
+                            <span class="inline-flex mt-3 bg-blue-100 text-blue-700 rounded-full px-2.5 py-1 text-xs">
+                                {{ ucfirst($t->socialPlatform?->slug ?? '') }}
+                            </span>
+                        @endforeach
+                    @else
+                        <p class="text-sm text-gray-400">No published posts yet.</p>
+                    @endif
 
                     <div class="flex gap-3 mt-3 pt-3 border-t border-gray-100">
                         <div class="flex items-center gap-1">

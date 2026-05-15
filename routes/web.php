@@ -41,7 +41,7 @@ Route::middleware(['auth', 'workspace.context'])->group(function (): void {
     Route::delete('posts/{post}', [PostsController::class, 'destroy'])->name('posts.destroy');
     Route::get('accounts', [AccountsController::class, 'index'])->name('accounts');
     Route::delete('accounts/connections/{account}', [AccountsController::class, 'destroyConnection'])->name('accounts.connections.destroy');
-    Route::view('analytics', 'analytics.index');
+    Route::get('analytics', [\App\Http\Controllers\AnalyticsController::class, 'index'])->name('analytics');
     Route::get('settings', [SettingsController::class, 'index'])->name('settings');
     Route::put('settings/workspace', [SettingsController::class, 'updateWorkspace'])->name('settings.workspace');
     Route::post('settings/facebook-data', [SettingsController::class, 'destroyFacebookData'])->name('settings.facebook-data.destroy');
