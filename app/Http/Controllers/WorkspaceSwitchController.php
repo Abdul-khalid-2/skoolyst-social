@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Workspace;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class WorkspaceSwitchController extends Controller
@@ -39,6 +40,33 @@ class WorkspaceSwitchController extends Controller
             'workspaces'  => $workspaces,
             'currentId'   => $currentId,
         ]);
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'min:2', 'max:80'],
+        ]);
+
+        $name = trim($validated['name']);
+        $user = $request->user();
+
+        $workspace = Workspace::create([
+            'owner_id'  => $user->id,
+            'name'      => $name,
+            'slug'      => Str::slug($name).'-ws-'.$user->id.'-'.time(),
+            'plan'      => 'free',
+            'is_active' => true,
+        ]);
+
+        $workspace->members()->attach($user->id, [
+            'role'      => 'owner',
+            'is_active' => true,
+        ]);
+
+        $request->session()->put('current_workspace_id', $workspace->id);
+
+        return redirect()->route('workspace.switch')->with('success', 'Workspace "'.$name.'" created and activated.');
     }
 
     public function switch(Request $request, Workspace $workspace): RedirectResponse

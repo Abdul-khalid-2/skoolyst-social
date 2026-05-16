@@ -90,6 +90,54 @@
                 @endforeach
             </div>
 
+            {{-- Create new workspace --}}
+            <div class="mt-4 bg-white border border-gray-200 rounded-xl px-5 py-4"
+                 x-data="{ open: false }">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-900">Create a new workspace</p>
+                        <p class="text-xs text-gray-400 mt-0.5">Separate brand, client, or project</p>
+                    </div>
+                    <button
+                        type="button"
+                        x-on:click="open = !open"
+                        class="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors text-gray-700"
+                    >
+                        <span x-show="!open">+ New Workspace</span>
+                        <span x-show="open" x-cloak>Cancel</span>
+                    </button>
+                </div>
+
+                <form
+                    x-show="open"
+                    x-cloak
+                    method="POST"
+                    action="{{ route('workspace.store') }}"
+                    class="mt-3 flex items-center gap-2"
+                >
+                    @csrf
+                    <input
+                        type="text"
+                        name="name"
+                        placeholder="Workspace name"
+                        required
+                        maxlength="80"
+                        class="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        value="{{ old('name') }}"
+                    >
+                    <button
+                        type="submit"
+                        class="shrink-0 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+                    >
+                        Create
+                    </button>
+                </form>
+
+                @error('name')
+                    <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
+                @enderror
+            </div>
+
             <p class="text-xs text-gray-400 mt-3 text-center">
                 {{ $workspaces->count() }} workspace{{ $workspaces->count() === 1 ? '' : 's' }} available
             </p>
