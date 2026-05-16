@@ -16,6 +16,30 @@
         : strtoupper(substr($parts[0] ?? 'U', 0, 2));
 @endphp
 
+@php
+    use App\Models\PostTarget;
+    use App\Models\SocialAccount;
+    use Carbon\Carbon;
+
+    $notifCount = 0;
+    $topbarWorkspaceId = session('current_workspace_id')
+        ?? $user?->workspaces()->wherePivot('is_active', true)->orderBy('workspaces.id')->first()?->id;
+
+    if ($topbarWorkspaceId) {
+        $wid = (int) $topbarWorkspaceId;
+
+        $notifCount += PostTarget::where('status', 'failed')
+            ->whereHas('post', fn ($q) => $q->where('workspace_id', $wid))
+            ->count();
+
+        $notifCount += SocialAccount::where('workspace_id', $wid)
+            ->where('is_connected', true)
+            ->whereNotNull('token_expires_at')
+            ->where('token_expires_at', '<=', Carbon::now()->addDays(7))
+            ->count();
+    }
+@endphp
+
 <header
     {{ $attributes->merge(['class' => 'sticky top-0 z-10 bg-white border-b border-gray-200 px-6 h-16 flex items-center justify-between gap-4']) }}
     x-data="{ showDropdown: false, showSearchResults: false, searchQuery: @js($searchQuery) }"
@@ -61,13 +85,21 @@
         <a
             href="{{ url('/notifications') }}"
             class="relative w-9 h-9 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
-            aria-label="Notifications"
+            aria-label="Notifications ({{ $notifCount }} unread)"
         >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            {{-- Bell icon --}}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
             </svg>
-            <span class="absolute top-2 right-1.5 bg-red-500 text-white text-xs font-semibold w-5 h-5 rounded-full flex items-center justify-center">3</span>
+
+            {{-- Badge: only show when count > 0 --}}
+            @if ($notifCount > 0)
+                <span class="absolute top-1 right-1 bg-red-500 text-white font-bold leading-none rounded-full flex items-center justify-center
+                    {{ $notifCount > 9 ? 'text-[9px] w-[18px] h-[18px]' : 'text-[10px] w-4 h-4' }}">
+                    {{ $notifCount > 99 ? '99+' : $notifCount }}
+                </span>
+            @endif
         </a>
 
         @if ($actionLabel && $actionHref)
