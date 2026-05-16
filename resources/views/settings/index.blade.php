@@ -638,84 +638,169 @@
                     </div>
 
                     <div x-show="active === 'appearance'" x-cloak>
-                        <div
-                            class="{{ $sectionCard }}"
-                            x-data="{
-                                theme: 'light',
-                                accent: 'blue',
-                                sidebar: 'expanded',
-                            }"
-                        >
-                            <h3 class="{{ $sectionTitle }} mb-1">Appearance</h3>
-                            <p class="{{ $sectionSub }} mb-5">
-                                {{ __('Appearance choices are stored in this page only. Global theme support may be added later.') }}
-                            </p>
-                            <div class="mb-6">
-                                <p class="text-sm font-semibold mb-3 text-gray-900">Theme</p>
-                                <div class="flex flex-wrap gap-3">
-                                    <button
-                                        type="button"
-                                        @click="theme = 'light'"
-                                        class="flex-1 min-w-[5rem] border-2 rounded-xl p-4 flex flex-col items-center gap-2 transition-all active:scale-95"
-                                        :class="theme === 'light' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'"
-                                    >
-                                        <span class="text-sm font-medium text-gray-800">Light</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        @click="theme = 'dark'"
-                                        class="flex-1 min-w-[5rem] border-2 rounded-xl p-4 flex flex-col items-center gap-2 transition-all active:scale-95"
-                                        :class="theme === 'dark' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'"
-                                    >
-                                        <span class="text-sm font-medium text-gray-800">Dark</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        @click="theme = 'system'"
-                                        class="flex-1 min-w-[5rem] border-2 rounded-xl p-4 flex flex-col items-center gap-2 transition-all active:scale-95"
-                                        :class="theme === 'system' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'"
-                                    >
-                                        <span class="text-sm font-medium text-gray-800">System</span>
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="mb-6">
-                                <p class="text-sm font-semibold mb-3 text-gray-900">Accent Color</p>
-                                <div class="flex flex-wrap gap-3">
-                                    @foreach (['blue' => 'bg-blue-600', 'purple' => 'bg-purple-600', 'emerald' => 'bg-emerald-600', 'orange' => 'bg-orange-500', 'pink' => 'bg-pink-500', 'red' => 'bg-red-500'] as $c => $cls)
-                                        <button
-                                            type="button"
-                                            @click="accent = '{{ $c }}'"
-                                            class="w-8 h-8 rounded-full cursor-pointer transition-all active:scale-95 ring-offset-2 {{ $cls }}"
-                                            :class="accent === '{{ $c }}' ? 'ring-2 ring-offset-2 ring-gray-800' : ''"
-                                        ></button>
-                                    @endforeach
-                                </div>
-                            </div>
-                            <div>
-                                <p class="text-sm font-semibold mb-3 text-gray-900">Sidebar Style</p>
-                                <div class="grid grid-cols-2 gap-3 max-w-sm">
-                                    <button
-                                        type="button"
-                                        @click="sidebar = 'expanded'"
-                                        class="border-2 rounded-xl p-4 flex flex-col items-center gap-2 transition-all active:scale-95"
-                                        :class="sidebar === 'expanded' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'"
-                                    >
-                                        <span class="text-gray-600 text-sm">Panel</span>
-                                        <span class="text-sm font-medium text-gray-800">Expanded</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        @click="sidebar = 'compact'"
-                                        class="border-2 rounded-xl p-4 flex flex-col items-center gap-2 transition-all active:scale-95"
-                                        :class="sidebar === 'compact' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'"
-                                    >
-                                        <span class="text-gray-600 text-sm">Grid</span>
-                                        <span class="text-sm font-medium text-gray-800">Compact</span>
-                                    </button>
-                                </div>
+                    <div class="{{ $sectionCard }}"
+                         x-data="appearanceSettings()"
+                         x-init="init()">
+
+                        <h3 class="{{ $sectionTitle }} mb-1">Appearance</h3>
+                        <p class="{{ $sectionSub }} mb-6">
+                            Choices are saved in your browser only. No account sync — each device remembers its own settings.
+                        </p>
+
+                        {{-- ── Theme ──────────────────────────────────────────────────── --}}
+                        <div class="mb-7">
+                            <p class="text-sm font-semibold text-gray-900 mb-3">Theme</p>
+                            <div class="flex flex-wrap gap-3">
+                                <button type="button" @click="setTheme('light')"
+                                    class="flex-1 min-w-[90px] border-2 rounded-xl p-4 flex flex-col items-center gap-2.5 transition-all active:scale-95"
+                                    :class="theme === 'light' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                                    <div class="w-12 h-8 rounded-md bg-white border border-gray-200 flex items-end overflow-hidden">
+                                        <div class="w-3 h-full bg-gray-100 border-r border-gray-200"></div>
+                                        <div class="flex-1 h-4 bg-gray-50"></div>
+                                    </div>
+                                    <span class="text-xs font-semibold text-gray-700">Light</span>
+                                    <div class="w-3 h-3 rounded-full border-2 transition-colors"
+                                         :class="theme === 'light' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'"></div>
+                                </button>
+
+                                <button type="button" @click="setTheme('dark')"
+                                    class="flex-1 min-w-[90px] border-2 rounded-xl p-4 flex flex-col items-center gap-2.5 transition-all active:scale-95"
+                                    :class="theme === 'dark' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                                    <div class="w-12 h-8 rounded-md bg-slate-800 border border-slate-700 flex items-end overflow-hidden">
+                                        <div class="w-3 h-full bg-slate-900 border-r border-slate-700"></div>
+                                        <div class="flex-1 h-4 bg-slate-800"></div>
+                                    </div>
+                                    <span class="text-xs font-semibold text-gray-700">Dark</span>
+                                    <div class="w-3 h-3 rounded-full border-2 transition-colors"
+                                         :class="theme === 'dark' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'"></div>
+                                </button>
+
+                                <button type="button" @click="setTheme('system')"
+                                    class="flex-1 min-w-[90px] border-2 rounded-xl p-4 flex flex-col items-center gap-2.5 transition-all active:scale-95"
+                                    :class="theme === 'system' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                                    <div class="w-12 h-8 rounded-md overflow-hidden border border-gray-200 flex">
+                                        <div class="w-1/2 bg-white flex items-end">
+                                            <div class="w-2 h-full bg-gray-100 border-r border-gray-200"></div>
+                                        </div>
+                                        <div class="w-1/2 bg-slate-800"></div>
+                                    </div>
+                                    <span class="text-xs font-semibold text-gray-700">System</span>
+                                    <div class="w-3 h-3 rounded-full border-2 transition-colors"
+                                         :class="theme === 'system' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'"></div>
+                                </button>
                             </div>
                         </div>
+
+                        {{-- ── Accent Color ────────────────────────────────────────────── --}}
+                        <div class="mb-7">
+                            <p class="text-sm font-semibold text-gray-900 mb-3">Accent Color</p>
+                            <div class="flex flex-wrap gap-3">
+                                @foreach ([
+                                    'blue'    => ['bg' => 'bg-blue-600',    'label' => 'Blue'],
+                                    'purple'  => ['bg' => 'bg-purple-600',  'label' => 'Purple'],
+                                    'emerald' => ['bg' => 'bg-emerald-600', 'label' => 'Emerald'],
+                                    'orange'  => ['bg' => 'bg-orange-500',  'label' => 'Orange'],
+                                    'pink'    => ['bg' => 'bg-pink-500',    'label' => 'Pink'],
+                                    'red'     => ['bg' => 'bg-red-500',     'label' => 'Red'],
+                                ] as $colorKey => $color)
+                                <button type="button"
+                                    @click="setAccent('{{ $colorKey }}')"
+                                    title="{{ $color['label'] }}"
+                                    class="relative w-10 h-10 rounded-full {{ $color['bg'] }} transition-all active:scale-95 focus:outline-none">
+                                    <span x-show="accent === '{{ $colorKey }}'"
+                                        class="absolute inset-0 rounded-full ring-2 ring-offset-2 ring-gray-800 flex items-center justify-center">
+                                        <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+                                        </svg>
+                                    </span>
+                                </button>
+                                @endforeach
+                            </div>
+                            <p class="text-xs text-gray-400 mt-2">Selected: <span class="font-medium text-gray-600" x-text="accent"></span></p>
+                        </div>
+
+                        {{-- ── Sidebar Style ───────────────────────────────────────────── --}}
+                        <div class="mb-7">
+                            <p class="text-sm font-semibold text-gray-900 mb-3">Sidebar Default</p>
+                            <div class="grid grid-cols-2 gap-3 max-w-xs">
+                                <button type="button" @click="setSidebar('expanded')"
+                                    class="border-2 rounded-xl p-4 flex flex-col items-center gap-2 transition-all active:scale-95"
+                                    :class="sidebar === 'expanded' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                                    <div class="w-12 h-8 rounded bg-gray-100 border border-gray-200 flex overflow-hidden">
+                                        <div class="w-4 h-full bg-gray-300 border-r border-gray-200"></div>
+                                        <div class="flex-1"></div>
+                                    </div>
+                                    <span class="text-xs font-semibold text-gray-700">Expanded</span>
+                                </button>
+                                <button type="button" @click="setSidebar('compact')"
+                                    class="border-2 rounded-xl p-4 flex flex-col items-center gap-2 transition-all active:scale-95"
+                                    :class="sidebar === 'compact' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                                    <div class="w-12 h-8 rounded bg-gray-100 border border-gray-200 flex overflow-hidden">
+                                        <div class="w-2 h-full bg-gray-300 border-r border-gray-200"></div>
+                                        <div class="flex-1"></div>
+                                    </div>
+                                    <span class="text-xs font-semibold text-gray-700">Compact</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {{-- ── Font Size ───────────────────────────────────────────────── --}}
+                        <div class="mb-7">
+                            <p class="text-sm font-semibold text-gray-900 mb-3">Font Size</p>
+                            <div class="flex gap-3">
+                                <button type="button" @click="setFontSize('normal')"
+                                    class="flex-1 border-2 rounded-xl px-4 py-3 text-center transition-all active:scale-95"
+                                    :class="fontSize === 'normal' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                                    <span class="text-sm font-semibold text-gray-700">Aa</span>
+                                    <p class="text-[10px] text-gray-400 mt-0.5">Normal</p>
+                                </button>
+                                <button type="button" @click="setFontSize('large')"
+                                    class="flex-1 border-2 rounded-xl px-4 py-3 text-center transition-all active:scale-95"
+                                    :class="fontSize === 'large' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                                    <span class="text-base font-semibold text-gray-700">Aa</span>
+                                    <p class="text-[10px] text-gray-400 mt-0.5">Large</p>
+                                </button>
+                            </div>
+                        </div>
+
+                        {{-- ── Density ─────────────────────────────────────────────────── --}}
+                        <div class="mb-7">
+                            <p class="text-sm font-semibold text-gray-900 mb-3">Layout Density</p>
+                            <div class="flex gap-3">
+                                <button type="button" @click="setDensity('comfortable')"
+                                    class="flex-1 border-2 rounded-xl px-4 py-3 text-center transition-all active:scale-95"
+                                    :class="density === 'comfortable' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                                    <div class="flex flex-col gap-1.5 items-center mb-1">
+                                        <div class="w-8 h-1.5 bg-gray-300 rounded-full"></div>
+                                        <div class="w-8 h-1.5 bg-gray-300 rounded-full"></div>
+                                        <div class="w-8 h-1.5 bg-gray-300 rounded-full"></div>
+                                    </div>
+                                    <p class="text-xs font-semibold text-gray-700">Comfortable</p>
+                                </button>
+                                <button type="button" @click="setDensity('compact')"
+                                    class="flex-1 border-2 rounded-xl px-4 py-3 text-center transition-all active:scale-95"
+                                    :class="density === 'compact' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                                    <div class="flex flex-col gap-0.5 items-center mb-1">
+                                        <div class="w-8 h-1 bg-gray-300 rounded-full"></div>
+                                        <div class="w-8 h-1 bg-gray-300 rounded-full"></div>
+                                        <div class="w-8 h-1 bg-gray-300 rounded-full"></div>
+                                        <div class="w-8 h-1 bg-gray-300 rounded-full"></div>
+                                    </div>
+                                    <p class="text-xs font-semibold text-gray-700">Compact</p>
+                                </button>
+                            </div>
+                        </div>
+
+                        {{-- ── Reset ───────────────────────────────────────────────────── --}}
+                        <div class="pt-5 border-t border-gray-100 flex items-center justify-between">
+                            <p class="text-xs text-gray-400">Changes apply instantly and are saved in your browser.</p>
+                            <button type="button" @click="resetAll()"
+                                class="text-xs font-medium text-gray-500 hover:text-rose-600 hover:underline transition-colors">
+                                Reset to defaults
+                            </button>
+                        </div>
+
+                    </div>
                     </div>
 
                     <div x-show="active === 'billing'" x-cloak class="space-y-6">

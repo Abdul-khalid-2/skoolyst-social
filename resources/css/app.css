@@ -1,5 +1,38 @@
 @import 'tailwindcss';
 
+/* Dark mode: class-based via .dark on <html> */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Accent color CSS variables */
+:root                      { --accent: #2563eb; }
+:root[data-accent="blue"]    { --accent: #2563eb; }
+:root[data-accent="purple"]  { --accent: #9333ea; }
+:root[data-accent="emerald"] { --accent: #059669; }
+:root[data-accent="orange"]  { --accent: #f97316; }
+:root[data-accent="pink"]    { --accent: #ec4899; }
+:root[data-accent="red"]     { --accent: #dc2626; }
+
+/* Font size */
+html.text-base-large body { font-size: 1.0625rem; }
+
+/* Density */
+html.density-compact .px-6  { padding-left: 1rem;    padding-right: 1rem; }
+html.density-compact .py-4  { padding-top: 0.625rem; padding-bottom: 0.625rem; }
+html.density-compact .p-6   { padding: 1rem; }
+html.density-compact .p-5   { padding: 0.875rem; }
+html.density-compact .gap-6 { gap: 0.875rem; }
+
+/* Dark mode base overrides */
+html.dark body                 { background-color: #0f172a; color: #e2e8f0; }
+html.dark .bg-white            { background-color: #1e293b !important; }
+html.dark .bg-gray-50          { background-color: #0f172a !important; }
+html.dark .border-gray-200     { border-color: #334155 !important; }
+html.dark .text-gray-900       { color: #f1f5f9 !important; }
+html.dark .text-gray-700       { color: #cbd5e1 !important; }
+html.dark .text-gray-600       { color: #94a3b8 !important; }
+html.dark .text-gray-500       { color: #64748b !important; }
+html.dark .shadow-sm           { box-shadow: 0 1px 2px rgba(0,0,0,.4) !important; }
+
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 @source '../**/*.blade.php';
