@@ -18,15 +18,16 @@
     $navItems = [
         ['path' => '/dashboard', 'match' => 'dashboard', 'label' => 'Dashboard', 'icon' => 'dashboard'],
         ['path' => '/posts', 'match' => 'posts*', 'label' => 'Posts', 'icon' => 'posts'],
-        ['path' => '/scheduled', 'match' => 'scheduled', 'label' => 'Scheduled', 'icon' => 'scheduled'],
+        
         ['path' => '/accounts', 'match' => 'accounts', 'label' => 'Accounts', 'icon' => 'accounts'],
         ['path' => '/analytics', 'match' => 'analytics', 'label' => 'Analytics', 'icon' => 'analytics'],
         ['path' => '/activity', 'match' => 'activity', 'label' => 'Activity', 'icon' => 'activity'],
-        ['path' => '/notifications', 'match' => 'notifications', 'label' => 'Notifications', 'icon' => 'notifications'],
+        
         ['path' => '/settings', 'match' => 'settings', 'label' => 'Settings', 'icon' => 'settings'],
     ];
 @endphp
-
+<!-- for now it will be commented if need in future I wll add this manually ['path' => '/scheduled', 'match' => 'scheduled', 'label' => 'Scheduled', 'icon' => 'scheduled'],
+['path' => '/notifications', 'match' => 'notifications', 'label' => 'Notifications', 'icon' => 'notifications'], -->
 <aside
     {{ $attributes->merge(['class' => 'relative flex flex-col bg-white border-r border-gray-200 transition-all duration-300 ease-in-out shrink-0']) }}
     x-bind:class="collapsed ? 'w-16' : 'w-60'"
