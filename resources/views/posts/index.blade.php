@@ -5,8 +5,10 @@
 @inject('postListing', PostListingService::class)
 
 @extends('layouts.app', [
-    'title' => $title,
+    'title'       => $title,
     'description' => $description,
+    'actionLabel' => 'Create Post',
+    'actionHref'  => '/create',
 ])
 
 @section('content')
@@ -82,7 +84,8 @@
                             </x-empty-state>
                         </div>
                     @else
-                    <table class="w-full">
+                    <div class="overflow-x-auto">
+                    <table class="w-full min-w-[640px]">
                         <thead>
                             <tr class="border-b border-gray-100 bg-gray-50">
                                 <th class="text-left text-xs font-medium text-gray-500 px-4 py-3 uppercase tracking-wide">Caption</th>
@@ -181,6 +184,7 @@
                             @endforeach
                         </tbody>
                     </table>
+                    </div>
 
                     @if ($posts->isEmpty() && (int) $tabCounts['all'] > 0)
                         <div class="px-4 py-8 text-center text-sm text-gray-500">{{ __('No posts found for this filter.') }}</div>

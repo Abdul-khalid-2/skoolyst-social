@@ -43,3 +43,14 @@
 .animate-scale-in {
     animation: scale-in 200ms ease-out;
 }
+
+.overflow-x-auto::-webkit-scrollbar {
+    height: 4px;
+}
+.overflow-x-auto::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+.overflow-x-auto::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 9999px;
+}

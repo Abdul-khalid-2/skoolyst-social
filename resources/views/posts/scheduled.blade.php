@@ -80,7 +80,8 @@
             </div>
 
             <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <table class="w-full">
+                <div class="overflow-x-auto">
+                <table class="w-full min-w-[640px]">
                     <thead>
                         <tr class="border-b border-gray-100 bg-gray-50">
                             <th class="text-left text-xs font-medium text-gray-500 px-5 py-3 uppercase tracking-wide w-1/3">Content Preview</th>
@@ -179,6 +180,7 @@
                         @endforeach
                     </tbody>
                 </table>
+                </div>
             </div>
 
             @if ($posts->hasPages())

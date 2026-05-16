@@ -8,6 +8,13 @@
         ? strtoupper(substr($parts[0], 0, 1) . substr($parts[count($parts) - 1], 0, 1))
         : strtoupper(substr($parts[0] ?? 'U', 0, 2));
 
+    $currentWorkspaceId = session('current_workspace_id');
+    $userWorkspaces = $user
+        ? $user->workspaces()->wherePivot('is_active', true)->withPivot('role')->orderBy('workspaces.id')->get()
+        : collect();
+    $activeWorkspace = $userWorkspaces->firstWhere('id', $currentWorkspaceId) ?? $userWorkspaces->first();
+    $activeInitials  = $activeWorkspace ? strtoupper(substr($activeWorkspace->name, 0, 2)) : 'WS';
+
     $navItems = [
         ['path' => '/dashboard', 'match' => 'dashboard', 'label' => 'Dashboard', 'icon' => 'dashboard'],
         ['path' => '/posts', 'match' => 'posts*', 'label' => 'Posts', 'icon' => 'posts'],
@@ -33,18 +40,94 @@
         <span x-show="!collapsed" class="font-semibold text-gray-900 text-sm tracking-tight">Skoolyst Social AI</span>
     </div>
 
-    <div class="px-2 py-3 border-b border-gray-100" x-bind:class="collapsed ? 'flex justify-center' : ''">
+    {{-- Workspace Switcher --}}
+    <div
+        class="px-2 py-3 border-b border-gray-100"
+        x-bind:class="collapsed ? 'flex justify-center' : ''"
+        x-data="{ wsOpen: false }"
+    >
+        {{-- Collapsed: just show initials avatar --}}
         <a
-            href="{{ url('/create') }}"
-            x-bind:title="collapsed ? 'Create Post' : null"
-            class="bg-blue-600 hover:bg-blue-700 text-white font-medium transition-all duration-150 rounded-lg flex items-center gap-2"
-            x-bind:class="collapsed ? 'w-9 h-9 justify-center' : 'w-full px-3 py-2'"
+            x-show="collapsed"
+            href="{{ url('/switch-account') }}"
+            title="Switch Workspace"
+            class="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white text-xs font-bold shrink-0"
         >
-            <svg class="shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-            </svg>
-            <span x-show="!collapsed">Create Post</span>
+            {{ $activeInitials }}
         </a>
+
+        {{-- Expanded: dropdown trigger --}}
+        <div x-show="!collapsed" class="relative w-full">
+            <button
+                type="button"
+                x-on:click="wsOpen = !wsOpen"
+                class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors text-left"
+            >
+                <span class="w-7 h-7 rounded-md bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                    {{ $activeInitials }}
+                </span>
+                <span class="flex-1 min-w-0">
+                    <span class="block text-xs font-semibold text-gray-900 truncate">
+                        {{ $activeWorkspace?->name ?? 'No Workspace' }}
+                    </span>
+                    <span class="block text-[10px] text-gray-400 truncate">
+                        {{ ucfirst($activeWorkspace?->pivot?->role ?? '') }}
+                    </span>
+                </span>
+                <svg class="shrink-0 text-gray-400 transition-transform" x-bind:class="wsOpen ? 'rotate-180' : ''" width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+
+            {{-- Click-away --}}
+            <button
+                type="button"
+                x-show="wsOpen"
+                x-cloak
+                x-on:click="wsOpen = false"
+                class="fixed inset-0 z-10 cursor-default"
+                aria-label="Close"
+            ></button>
+
+            {{-- Dropdown list --}}
+            <div
+                x-show="wsOpen"
+                x-cloak
+                class="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-20 overflow-hidden"
+            >
+                @foreach ($userWorkspaces as $ws)
+                    @php $isCurrent = $ws->id == $currentWorkspaceId; @endphp
+                    <div class="flex items-center gap-2.5 px-3 py-2.5 {{ $isCurrent ? 'bg-blue-50' : 'hover:bg-gray-50' }} transition-colors">
+                        <span class="w-6 h-6 rounded-md bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                            {{ strtoupper(substr($ws->name, 0, 2)) }}
+                        </span>
+                        <span class="flex-1 min-w-0 text-xs font-medium text-gray-800 truncate">{{ $ws->name }}</span>
+                        @if ($isCurrent)
+                            <span class="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>
+                        @else
+                            <form method="POST" action="{{ route('workspace.switch.set', $ws->id) }}">
+                                @csrf
+                                <button type="submit" class="text-[10px] font-medium text-blue-600 hover:underline">
+                                    Switch
+                                </button>
+                            </form>
+                        @endif
+                    </div>
+                @endforeach
+
+                <div class="border-t border-gray-100">
+                    <a
+                        href="{{ url('/switch-account') }}"
+                        class="flex items-center gap-2 px-3 py-2.5 text-xs text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+                    >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M12 5v14M5 12h14" stroke-linecap="round"/>
+                        </svg>
+                        Manage workspaces
+                    </a>
+                </div>
+            </div>
+        </div>
     </div>
 
     <nav class="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto" aria-label="Main navigation">
