@@ -719,43 +719,209 @@
                     </div>
 
                     <div x-show="active === 'billing'" x-cloak class="space-y-6">
-                        <div
-                            class="relative overflow-hidden rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-700 p-6 sm:p-7 text-white shadow-lg shadow-indigo-900/20 ring-1 ring-white/10"
-                        >
-                            <div class="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-white/10 blur-2xl" aria-hidden="true"></div>
-                            <div class="absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-cyan-400/20 blur-2xl" aria-hidden="true"></div>
-                            <div class="relative flex items-center justify-between gap-3">
-                                <p class="text-lg font-bold tracking-tight sm:text-xl">
-                                    {{ $workspace?->plan ? \Illuminate\Support\Str::of($workspace->plan)->headline() : 'Free' }} Plan
-                                </p>
-                                <span
-                                    class="shrink-0 rounded-full border border-white/20 bg-white/15 px-3 py-1 text-xs font-medium text-white/95 backdrop-blur-sm"
-                                >{{ $workspace?->is_active ? 'Active' : 'Inactive' }}</span>
+
+                        @php
+                            $currentPlan = $subscription?->plan ?? $workspace?->plan ?? 'free';
+                            $planGradients = [
+                                'free'       => 'from-gray-500 to-gray-600',
+                                'starter'    => 'from-blue-500 to-cyan-500',
+                                'pro'        => 'from-indigo-600 to-violet-600',
+                                'enterprise' => 'from-amber-500 to-orange-600',
+                            ];
+                            $statusColors = [
+                                'active'    => 'bg-emerald-400/30 text-white',
+                                'trialing'  => 'bg-blue-400/30 text-white',
+                                'cancelled' => 'bg-rose-400/30 text-white',
+                                'expired'   => 'bg-gray-400/30 text-white',
+                            ];
+                        @endphp
+
+                        @if (session('success'))
+                            <div class="px-4 py-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-xl">
+                                {{ session('success') }}
                             </div>
-                            <p class="relative mt-2 text-sm leading-relaxed text-blue-100/90">
-                                {{ __('Usage and plan limits are shown for reference. Invoicing is managed in your billing account.') }}
-                            </p>
-                        </div>
-                        <div
-                            class="{{ $sectionCard }}"
-                        >
-                            <h3 class="{{ $sectionTitle }} mb-1">Usage This Month</h3>
-                            <p class="{{ $sectionSub }} mb-5">Resource usage against your current plan.</p>
-                            @foreach (['Posts' => [47, 100, 'bg-blue-500'], 'Connected accounts' => [2, 5, 'bg-emerald-500'], 'Team members' => [1, 3, 'bg-purple-500']] as $label => $data)
-                                <div @class(['mb-4' => $label !== 'Team members'])>
-                                    <div class="flex items-center justify-between text-xs mb-1">
-                                        <span class="text-gray-600">{{ $label }}</span>
-                                        <span class="text-gray-700 font-semibold">{{ $data[0] }}/{{ $data[1] }}</span>
+                        @endif
+                        @if (session('info'))
+                            <div class="px-4 py-3 bg-blue-50 border border-blue-200 text-blue-700 text-sm rounded-xl">
+                                {{ session('info') }}
+                            </div>
+                        @endif
+
+                        {{-- Current Plan Card --}}
+                        <div class="{{ $sectionCard }}">
+                            <h3 class="{{ $sectionTitle }} mb-4">Current Plan</h3>
+
+                            <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br {{ $planGradients[$currentPlan] ?? $planGradients['free'] }} p-6 text-white">
+                                <div class="absolute -right-10 -top-10 w-32 h-32 rounded-full bg-white/10 blur-2xl"></div>
+                                <div class="absolute right-6 bottom-6 w-16 h-16 rounded-full bg-white/5"></div>
+                                <div class="relative flex items-start justify-between gap-4 flex-wrap">
+                                    <div>
+                                        <p class="text-xs font-semibold uppercase tracking-widest text-white/60">Active Plan</p>
+                                        <p class="text-3xl font-extrabold mt-1">{{ ucfirst($currentPlan) }}</p>
+                                        @if (($allPlans[$currentPlan]['price_pkr'] ?? 0) > 0)
+                                            <p class="text-sm text-white/70 mt-1">PKR {{ number_format($allPlans[$currentPlan]['price_pkr']) }} / month</p>
+                                        @else
+                                            <p class="text-sm text-white/70 mt-1">Free forever</p>
+                                        @endif
                                     </div>
-                                    <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
-                                        <div
-                                            class="h-full {{ $data[2] }}"
-                                            style="width: {{ ($data[0] / $data[1]) * 100 }}%"
-                                        ></div>
-                                    </div>
+                                    @if ($subscription)
+                                        <span class="text-xs font-bold px-3 py-1.5 rounded-full {{ $statusColors[$subscription->status] ?? 'bg-white/20 text-white' }}">
+                                            {{ ucfirst($subscription->status) }}
+                                        </span>
+                                    @endif
                                 </div>
-                            @endforeach
+                                @if ($subscription)
+                                    <div class="relative mt-4 flex flex-wrap gap-4 text-xs text-white/60">
+                                        <span>Started {{ $subscription->started_at->format('M d, Y') }}</span>
+                                        @if ($subscription->expires_at)
+                                            <span>·</span>
+                                            <span>
+                                                @if ($subscription->daysRemaining() !== null && $subscription->daysRemaining() <= 7)
+                                                    <span class="text-amber-300 font-semibold">Expires in {{ $subscription->daysRemaining() }} days</span>
+                                                @else
+                                                    Renews {{ $subscription->expires_at->format('M d, Y') }}
+                                                @endif
+                                            </span>
+                                        @endif
+                                    </div>
+                                @endif
+                            </div>
+
+                            <ul class="mt-5 space-y-2">
+                                @foreach (($allPlans[$currentPlan]['features'] ?? []) as $feature)
+                                    <li class="flex items-center gap-2.5 text-sm text-gray-700">
+                                        <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+                                        </svg>
+                                        {{ $feature }}
+                                    </li>
+                                @endforeach
+                            </ul>
+
+                            @if ($canManageBilling && $subscription && $subscription->status === 'active' && $currentPlan !== 'free')
+                                <div class="mt-5 pt-5 border-t border-gray-100">
+                                    <form method="POST" action="{{ route('settings.billing.cancel') }}">
+                                        @csrf
+                                        <button type="submit"
+                                            onclick="return confirm('Cancel your subscription? Your workspace will move to the Free plan immediately.')"
+                                            class="text-xs font-medium text-rose-600 hover:text-rose-700 hover:underline">
+                                            Cancel subscription
+                                        </button>
+                                    </form>
+                                </div>
+                            @endif
                         </div>
+
+                        {{-- Plan Picker --}}
+                        @if ($canManageBilling)
+                        <div class="{{ $sectionCard }}">
+                            <h3 class="{{ $sectionTitle }} mb-1">Change Plan</h3>
+                            <p class="{{ $sectionSub }} mb-5">Select the plan that fits your workspace. Changes apply immediately.</p>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                @foreach ($allPlans as $planKey => $plan)
+                                @php
+                                    $isCurrent = $planKey === $currentPlan;
+                                    $borderCls = $isCurrent
+                                        ? 'border-blue-400 bg-blue-50/40 ring-1 ring-blue-300'
+                                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/50';
+                                @endphp
+                                <div class="relative rounded-xl border {{ $borderCls }} p-5 transition-all">
+                                    @if ($isCurrent)
+                                        <span class="absolute top-3 right-3 text-[10px] font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full">Current</span>
+                                    @endif
+                                    <div class="flex items-start justify-between gap-2 mb-3">
+                                        <div>
+                                            <p class="text-sm font-bold text-gray-900">{{ $plan['name'] }}</p>
+                                            @if ($plan['price_pkr'] > 0)
+                                                <p class="text-xs text-gray-400">PKR {{ number_format($plan['price_pkr']) }}/mo</p>
+                                            @elseif ($planKey === 'enterprise')
+                                                <p class="text-xs text-gray-400">Contact sales</p>
+                                            @else
+                                                <p class="text-xs text-gray-400">Free forever</p>
+                                            @endif
+                                        </div>
+                                    </div>
+                                    <ul class="space-y-1.5 mb-4">
+                                        @foreach ($plan['features'] as $f)
+                                            <li class="flex items-center gap-2 text-xs text-gray-600">
+                                                <svg class="w-3 h-3 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+                                                </svg>
+                                                {{ $f }}
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                    @if (! $isCurrent)
+                                        @if ($planKey === 'enterprise')
+                                            <a href="mailto:skoolyst@gmail.com?subject=Enterprise Plan Inquiry — {{ $workspace->name }}"
+                                                class="w-full text-center block text-xs font-semibold px-3 py-2 rounded-lg border border-amber-400 text-amber-700 hover:bg-amber-50 transition-colors">
+                                                Contact Sales
+                                            </a>
+                                        @else
+                                            <form method="POST" action="{{ route('settings.billing.plan') }}">
+                                                @csrf
+                                                <input type="hidden" name="plan" value="{{ $planKey }}">
+                                                <button type="submit"
+                                                    onclick="return confirm('Switch to the {{ $plan['name'] }} plan?{{ $plan['price_pkr'] > 0 ? ' PKR ' . number_format($plan['price_pkr']) . '/month.' : ' Free plan.' }}')"
+                                                    class="w-full text-xs font-semibold px-3 py-2 rounded-lg {{ $planKey === 'free' ? 'border border-gray-200 text-gray-600 hover:bg-gray-50' : 'bg-blue-600 hover:bg-blue-700 text-white' }} transition-colors">
+                                                    {{ $currentPlan === 'free' ? 'Upgrade to ' : 'Switch to ' }}{{ $plan['name'] }}
+                                                </button>
+                                            </form>
+                                        @endif
+                                    @endif
+                                </div>
+                                @endforeach
+                            </div>
+                        </div>
+                        @endif
+
+                        {{-- Billing History --}}
+                        <div class="{{ $sectionCard }}">
+                            <h3 class="{{ $sectionTitle }} mb-4">Billing History</h3>
+                            @if ($billingHistory->isEmpty())
+                                <p class="text-sm text-gray-400">No transactions yet.</p>
+                            @else
+                                <div class="overflow-x-auto">
+                                <table class="w-full min-w-[480px] text-sm">
+                                    <thead>
+                                        <tr class="border-b border-gray-100">
+                                            <th class="text-left text-xs font-semibold text-gray-400 pb-2 pr-4">Date</th>
+                                            <th class="text-left text-xs font-semibold text-gray-400 pb-2 pr-4">Plan</th>
+                                            <th class="text-left text-xs font-semibold text-gray-400 pb-2 pr-4">Amount</th>
+                                            <th class="text-left text-xs font-semibold text-gray-400 pb-2 pr-4">Gateway</th>
+                                            <th class="text-left text-xs font-semibold text-gray-400 pb-2">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-50">
+                                        @foreach ($billingHistory as $tx)
+                                        @php
+                                            $txStatus = match($tx->status) {
+                                                'success'  => 'bg-emerald-100 text-emerald-700',
+                                                'pending'  => 'bg-amber-100 text-amber-700',
+                                                'failed'   => 'bg-rose-100 text-rose-600',
+                                                'refunded' => 'bg-gray-100 text-gray-600',
+                                                default    => 'bg-gray-100 text-gray-600',
+                                            };
+                                        @endphp
+                                        <tr>
+                                            <td class="py-3 pr-4 text-xs text-gray-500">{{ $tx->created_at->format('M d, Y') }}</td>
+                                            <td class="py-3 pr-4 text-xs font-medium text-gray-800">{{ ucfirst($tx->subscription?->plan ?? '—') }}</td>
+                                            <td class="py-3 pr-4 text-xs text-gray-700">{{ $tx->formattedAmount() }}</td>
+                                            <td class="py-3 pr-4 text-xs text-gray-500 capitalize">{{ $tx->gateway ?? '—' }}</td>
+                                            <td class="py-3">
+                                                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full {{ $txStatus }}">
+                                                    {{ ucfirst($tx->status) }}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                                </div>
+                            @endif
+                        </div>
+
                     </div>
 
                     <div x-show="active === 'integrations'" x-cloak>

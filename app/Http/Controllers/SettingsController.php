@@ -51,10 +51,23 @@ class SettingsController extends Controller
                 ->get()
             : collect();
 
-        // Subscription
+        // Subscription (active or trialing only)
         $subscription = $workspace
-            ? Subscription::where('workspace_id', $workspace->id)->latest('started_at')->first()
+            ? Subscription::where('workspace_id', $workspace->id)
+                ->whereIn('status', ['active', 'trialing'])
+                ->latest('started_at')
+                ->first()
             : null;
+
+        $billingHistory = $workspace
+            ? \App\Models\PaymentTransaction::where('workspace_id', $workspace->id)
+                ->with('subscription')
+                ->latest()
+                ->limit(10)
+                ->get()
+            : collect();
+
+        $allPlans = \App\Support\PlanConfig::all();
 
         // Check superadmin with team_id = null (not team-scoped)
         if (function_exists('setPermissionsTeamId')) {
@@ -97,7 +110,7 @@ class SettingsController extends Controller
         return view('settings.index', compact(
             'user', 'workspace', 'canEditWorkspace',
             'canInviteMembers', 'canRemoveMembers', 'canManageBilling',
-            'members', 'subscription',
+            'members', 'subscription', 'billingHistory', 'allPlans',
             'isOwner', 'isSuperadmin',
             'roles', 'allPermissions', 'permissionGroups',
             'allUsers', 'allWorkspaces', 'plans',

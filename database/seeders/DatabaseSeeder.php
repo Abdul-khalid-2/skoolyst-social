@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             SocialPlatformSeeder::class,
             WorkspaceSocialAccountsSeeder::class,
             SuperadminSeeder::class,
+            WorkspaceSubscriptionSeeder::class,
         ]);
     }
 }

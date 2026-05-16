@@ -59,4 +59,22 @@ class Workspace extends Model
     {
         return $this->hasMany(Post::class);
     }
+
+    public function subscriptions(): HasMany
+    {
+        return $this->hasMany(Subscription::class);
+    }
+
+    public function activeSubscription(): ?Subscription
+    {
+        return $this->subscriptions()
+            ->whereIn('status', ['active', 'trialing'])
+            ->latest('started_at')
+            ->first();
+    }
+
+    public function transactions(): HasMany
+    {
+        return $this->hasMany(PaymentTransaction::class);
+    }
 }
