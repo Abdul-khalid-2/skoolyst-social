@@ -48,7 +48,8 @@ Route::middleware(['auth', 'workspace.context'])->group(function (): void {
     Route::get('profile', [ProfileController::class, 'index'])->name('profile');
     Route::put('profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
-    Route::view('switch-account', 'workspaces.switch');
+    Route::get('switch-account', [\App\Http\Controllers\WorkspaceSwitchController::class, 'index'])->name('workspace.switch');
+    Route::post('switch-account/{workspace}', [\App\Http\Controllers\WorkspaceSwitchController::class, 'switch'])->name('workspace.switch.set');
     Route::get('notifications', [\App\Http\Controllers\NotificationsController::class, 'index'])->name('notifications');
     Route::get('activity', [\App\Http\Controllers\ActivityController::class, 'index'])->name('activity');
 });
