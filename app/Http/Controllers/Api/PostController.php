@@ -90,19 +90,19 @@ class PostController extends Controller
 
             if ($request->hasFile('media')) {
                 $file = $request->file('media');
-                $dir = 'workspaces/'.$workspace->id.'/posts/'.$post->id;
                 $ext = $file->getClientOriginalExtension() !== ''
                     ? $file->getClientOriginalExtension()
                     : (str_starts_with($file->getMimeType() ?? '', 'video/') ? 'mp4' : 'bin');
                 $name = (string) Str::uuid().'.'.$ext;
-                $path = $file->storeAs($dir, $name, 'public');
+                $dir = 'media/'.$workspace->slug;
+                $path = $file->storeAs($dir, $name, 'website');
                 $mime = $file->getMimeType() ?? 'application/octet-stream';
                 $type = $this->mapMediaType($mime, (string) $file->getClientOriginalName());
 
                 PostMedia::query()->create([
                     'post_id' => $post->id,
                     'media_asset_id' => null,
-                    'url' => URL::to(Storage::disk('public')->url($path)),
+                    'url' => URL::to(Storage::disk('website')->url($path)),
                     'type' => $type,
                     'size' => $file->getSize() ?: 0,
                     'mime_type' => $mime,
