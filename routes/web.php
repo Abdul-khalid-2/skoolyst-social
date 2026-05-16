@@ -53,6 +53,24 @@ Route::middleware(['auth', 'workspace.context'])->group(function (): void {
     Route::post('switch-account/{workspace}', [\App\Http\Controllers\WorkspaceSwitchController::class, 'switch'])->name('workspace.switch.set');
     Route::get('notifications', [\App\Http\Controllers\NotificationsController::class, 'index'])->name('notifications');
     Route::get('activity', [\App\Http\Controllers\ActivityController::class, 'index'])->name('activity');
+
+    // Role manager (owner + superadmin)
+    Route::prefix('settings/roles')->name('settings.roles.')->group(function () {
+        Route::post('/',                [\App\Http\Controllers\RoleManagerController::class, 'storeRole'])       ->name('store');
+        Route::put('/{roleName}',       [\App\Http\Controllers\RoleManagerController::class, 'updateRole'])      ->name('update');
+        Route::delete('/{roleName}',    [\App\Http\Controllers\RoleManagerController::class, 'destroyRole'])     ->name('destroy');
+        Route::post('/{roleName}/sync', [\App\Http\Controllers\RoleManagerController::class, 'syncPermissions']) ->name('sync');
+        Route::post('/repair',          [\App\Http\Controllers\RoleManagerController::class, 'repair'])          ->name('repair');
+    });
+
+    // Superadmin panel
+    Route::prefix('settings/superadmin')->name('settings.superadmin.')->group(function () {
+        Route::post('/make-superadmin',              [\App\Http\Controllers\RoleManagerController::class, 'makeSuperadmin'])   ->name('promote');
+        Route::delete('/remove-superadmin/{user}',   [\App\Http\Controllers\RoleManagerController::class, 'removeSuperadmin'])->name('demote');
+        Route::post('/toggle-user/{user}',           [\App\Http\Controllers\RoleManagerController::class, 'toggleUser'])      ->name('toggle-user');
+        Route::post('/toggle-workspace/{workspace}', [\App\Http\Controllers\RoleManagerController::class, 'toggleWorkspace']) ->name('toggle-workspace');
+        Route::post('/plan/{workspace}',             [\App\Http\Controllers\RoleManagerController::class, 'updatePlan'])      ->name('plan');
+    });
 });
 
 // Temporary testing route: allows logout via direct URL hit.

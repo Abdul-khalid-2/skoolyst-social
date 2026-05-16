@@ -45,6 +45,7 @@ class RegisterUserWithDefaultWorkspaceAction
             app(PermissionRegistrar::class)->setPermissionsTeamId((int) $workspace->id);
             Role::findOrCreate('owner', 'web');
             $user->syncRoles(['owner']);
+            app(PermissionRegistrar::class)->forgetCachedPermissions();
 
             return $user;
         });

@@ -7,6 +7,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 class WorkspaceSwitchController extends Controller
 {
@@ -63,6 +65,15 @@ class WorkspaceSwitchController extends Controller
             'role'      => 'owner',
             'is_active' => true,
         ]);
+
+        $workspaceId = (int) $workspace->id;
+        if (function_exists('setPermissionsTeamId')) {
+            setPermissionsTeamId($workspaceId);
+        }
+        app(PermissionRegistrar::class)->setPermissionsTeamId($workspaceId);
+        Role::findOrCreate('owner', 'web');
+        $user->syncRoles(['owner']);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         $request->session()->put('current_workspace_id', $workspace->id);
 

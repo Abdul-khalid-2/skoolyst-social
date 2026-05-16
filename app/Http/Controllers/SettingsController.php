@@ -19,17 +19,56 @@ class SettingsController extends Controller
 
     public function index(Request $request): View
     {
-        $user = $request->user();
-        $workspace = $this->workspaceSettings->getCurrentWorkspace($user);
+        $user             = $request->user();
+        $workspace        = $this->workspaceSettings->getCurrentWorkspace($user);
         $canEditWorkspace = $workspace && $this->workspaceSettings->userCanEditWorkspaceName($user, $workspace);
 
-        return view('settings.index', [
-            'user' => $user,
-            'workspace' => $workspace,
-            'canEditWorkspace' => $canEditWorkspace,
-            'title' => 'Settings',
-            'description' => 'Workspace and application preferences.',
-        ]);
+        // Check superadmin with team_id = null (not team-scoped)
+        if (function_exists('setPermissionsTeamId')) {
+            setPermissionsTeamId(null);
+        }
+        app(\Spatie\Permission\PermissionRegistrar::class)->setPermissionsTeamId(null);
+        $isSuperadmin = $user->hasRole('superadmin');
+
+        // Restore team for workspace-scoped checks
+        $workspaceId = (int) $request->session()->get('current_workspace_id', 0);
+        if ($workspaceId) {
+            if (function_exists('setPermissionsTeamId')) {
+                setPermissionsTeamId($workspaceId);
+            }
+            app(\Spatie\Permission\PermissionRegistrar::class)->setPermissionsTeamId($workspaceId);
+        }
+        $isOwner = $user->hasRole('owner') || $isSuperadmin;
+
+        $allPermissions   = \App\Support\WorkspacePermissionMap::permissions();
+        $permissionGroups = collect($allPermissions)
+            ->groupBy(fn ($p) => explode('.', $p)[0])
+            ->toArray();
+
+        $roles = $isOwner
+            ? \Spatie\Permission\Models\Role::where('guard_name', 'web')
+                ->with('permissions')
+                ->get()
+                ->map(fn ($r) => [
+                    'name'        => $r->name,
+                    'permissions' => $r->permissions->pluck('name')->toArray(),
+                ])
+            : collect();
+
+        $allUsers      = $isSuperadmin ? \App\Models\User::withCount('workspaces')->latest()->get() : collect();
+        $allWorkspaces = $isSuperadmin ? \App\Models\Workspace::with('owner')->withCount('members')->latest()->get() : collect();
+        $plans         = ['free', 'starter', 'pro', 'business', 'enterprise'];
+
+        $title       = 'Settings';
+        $description = 'Workspace and application preferences.';
+
+        return view('settings.index', compact(
+            'user', 'workspace', 'canEditWorkspace',
+            'isOwner', 'isSuperadmin',
+            'roles', 'allPermissions', 'permissionGroups',
+            'allUsers', 'allWorkspaces', 'plans',
+            'title', 'description'
+        ));
     }
 
     public function updateWorkspace(WebUpdateWorkspaceRequest $request): RedirectResponse

@@ -232,6 +232,36 @@
                             </span>
                             <span class="min-w-0">Integrations</span>
                         </button>
+
+                        @if ($isOwner)
+                        <button type="button" @click="active = 'roles'"
+                            class="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-all duration-200"
+                            :class="active === 'roles' ? 'bg-blue-50 text-blue-900 shadow-sm border border-blue-200/80' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 border border-transparent'">
+                            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                                  :class="active === 'roles' ? 'bg-white/80 text-blue-600 shadow-sm' : 'bg-gray-100 text-gray-500'">
+                                <svg class="h-[15px] w-[15px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                          d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.955 11.955 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
+                                </svg>
+                            </span>
+                            <span class="min-w-0">Roles & Permissions</span>
+                        </button>
+                        @endif
+
+                        @if ($isSuperadmin)
+                        <button type="button" @click="active = 'superadmin'"
+                            class="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-all duration-200"
+                            :class="active === 'superadmin' ? 'bg-purple-50 text-purple-900 shadow-sm border border-purple-200/80' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 border border-transparent'">
+                            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                                  :class="active === 'superadmin' ? 'bg-white/80 text-purple-600 shadow-sm' : 'bg-gray-100 text-gray-500'">
+                                <svg class="h-[15px] w-[15px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                          d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>
+                                </svg>
+                            </span>
+                            <span class="min-w-0">Superadmin</span>
+                        </button>
+                        @endif
                     </nav>
                 </div>
                 </aside>
@@ -598,6 +628,293 @@
                             @endif
                         </div>
                     </div>
+
+                    {{-- Roles & Permissions Panel --}}
+                    @if ($isOwner)
+                    <div x-show="active === 'roles'" x-cloak class="space-y-6">
+
+                        <div class="{{ $sectionCard }}">
+                            <div class="flex items-start justify-between gap-4 flex-wrap">
+                                <div>
+                                    <h3 class="{{ $sectionTitle }}">Roles & Permissions</h3>
+                                    <p class="{{ $sectionSub }} mt-1">Add, rename, delete roles and assign permissions per role. Built-in roles (superadmin, owner, admin, editor, viewer) cannot be renamed or deleted.</p>
+                                </div>
+                                <form method="POST" action="{{ route('settings.roles.repair') }}">
+                                    @csrf
+                                    <button type="submit"
+                                        onclick="return confirm('Re-sync all workspace member roles? This fixes permission issues for all users.')"
+                                        class="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors">
+                                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+                                        </svg>
+                                        Repair All Roles
+                                    </button>
+                                </form>
+                            </div>
+                            @if (session('success'))
+                                <div class="mt-4 px-4 py-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-lg">
+                                    {{ session('success') }}
+                                </div>
+                            @endif
+                        </div>
+
+                        <div class="{{ $sectionCard }}" x-data="{ addOpen: false }">
+                            <div class="flex items-center justify-between mb-4">
+                                <h4 class="text-sm font-semibold text-gray-900">All Roles</h4>
+                                <button type="button" @click="addOpen = !addOpen"
+                                    class="text-xs font-medium px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors">
+                                    + New Role
+                                </button>
+                            </div>
+
+                            <form x-show="addOpen" x-cloak method="POST" action="{{ route('settings.roles.store') }}"
+                                  class="mb-4 flex items-center gap-2">
+                                @csrf
+                                <input type="text" name="name" placeholder="e.g. moderator" value="{{ old('name') }}"
+                                       class="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                                       pattern="[a-z0-9_\-]+" title="Lowercase letters, numbers, hyphens, underscores only">
+                                <button type="submit" class="shrink-0 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">Create</button>
+                                <button type="button" @click="addOpen = false" class="shrink-0 text-xs text-gray-500 hover:text-gray-700 px-2">Cancel</button>
+                            </form>
+
+                            <div class="divide-y divide-gray-100">
+                                @foreach ($roles as $role)
+                                @php
+                                    $protected = in_array($role['name'], ['superadmin', 'owner', 'admin', 'editor', 'viewer']);
+                                    $badgeCls  = match($role['name']) {
+                                        'superadmin' => 'bg-purple-100 text-purple-700',
+                                        'owner'      => 'bg-blue-100 text-blue-700',
+                                        'admin'      => 'bg-indigo-100 text-indigo-700',
+                                        'editor'     => 'bg-gray-100 text-gray-600',
+                                        default      => 'bg-emerald-100 text-emerald-700',
+                                    };
+                                @endphp
+                                <div class="py-3 flex items-center gap-3 flex-wrap" x-data="{ editOpen: false }">
+                                    <span class="text-xs font-semibold px-2.5 py-1 rounded-full {{ $badgeCls }}">{{ ucfirst($role['name']) }}</span>
+                                    <span class="text-xs text-gray-400">{{ count($role['permissions']) }} permissions</span>
+                                    <div class="ml-auto flex items-center gap-2">
+                                        @if (! $protected)
+                                            <button type="button" @click="editOpen = !editOpen"
+                                                class="text-xs text-gray-400 hover:text-blue-600 px-2 py-1 rounded hover:bg-blue-50 transition-colors">
+                                                Rename
+                                            </button>
+                                            <form method="POST" action="{{ route('settings.roles.destroy', $role['name']) }}" class="inline">
+                                                @csrf @method('DELETE')
+                                                <button type="submit"
+                                                    onclick="return confirm('Delete role {{ $role['name'] }}?')"
+                                                    class="text-xs text-gray-400 hover:text-rose-600 px-2 py-1 rounded hover:bg-rose-50 transition-colors">
+                                                    Delete
+                                                </button>
+                                            </form>
+                                        @else
+                                            <span class="text-[10px] text-gray-300 italic">built-in</span>
+                                        @endif
+                                    </div>
+                                    @if (! $protected)
+                                    <form x-show="editOpen" x-cloak method="POST"
+                                          action="{{ route('settings.roles.update', $role['name']) }}"
+                                          class="w-full flex items-center gap-2 pb-2">
+                                        @csrf @method('PUT')
+                                        <input type="text" name="name" value="{{ $role['name'] }}"
+                                               class="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-blue-500"
+                                               pattern="[a-z0-9_\-]+">
+                                        <button type="submit" class="text-xs font-medium bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700">Save</button>
+                                    </form>
+                                    @endif
+                                </div>
+                                @endforeach
+                            </div>
+                        </div>
+
+                        @foreach ($roles as $role)
+                        <div class="{{ $sectionCard }}">
+                            <h4 class="text-sm font-semibold text-gray-900 mb-1">
+                                {{ ucfirst($role['name']) }}
+                                <span class="font-normal text-gray-400 text-xs ml-1">— Permission Matrix</span>
+                            </h4>
+                            <form method="POST" action="{{ route('settings.roles.sync', $role['name']) }}">
+                                @csrf
+                                <div class="space-y-5 mt-4">
+                                    @foreach ($permissionGroups as $group => $perms)
+                                    <div>
+                                        <p class="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">{{ str_replace('_', ' ', $group) }}</p>
+                                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-6">
+                                            @foreach ($perms as $perm)
+                                            <label class="flex items-center gap-2.5 cursor-pointer">
+                                                <input type="checkbox" name="permissions[]" value="{{ $perm }}"
+                                                       {{ in_array($perm, $role['permissions']) ? 'checked' : '' }}
+                                                       class="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                                <span class="text-xs text-gray-700">{{ str_replace(['.', '_'], [' → ', ' '], $perm) }}</span>
+                                            </label>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                    @endforeach
+                                </div>
+                                <div class="mt-5 flex justify-end">
+                                    <button type="submit"
+                                        class="text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+                                        Sync Permissions for {{ ucfirst($role['name']) }}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                        @endforeach
+
+                    </div>
+                    @endif
+
+                    {{-- Superadmin Panel --}}
+                    @if ($isSuperadmin)
+                    <div x-show="active === 'superadmin'" x-cloak class="space-y-6">
+
+                        <div class="{{ $sectionCard }} border-purple-200 bg-gradient-to-br from-purple-50 to-white">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-xl bg-purple-600 flex items-center justify-center shrink-0">
+                                    <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="{{ $sectionTitle }}">Superadmin Panel</h3>
+                                    <p class="{{ $sectionSub }}">Full application control — manage users, workspaces, plans, and role assignments.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="{{ $sectionCard }}">
+                            <h4 class="text-sm font-semibold text-gray-900 mb-4">All Users ({{ $allUsers->count() }})</h4>
+
+                            <form method="POST" action="{{ route('settings.superadmin.promote') }}" class="flex items-center gap-2 mb-4">
+                                @csrf
+                                <select name="user_id" class="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-purple-500">
+                                    <option value="">Select user to promote to superadmin...</option>
+                                    @foreach ($allUsers->where('id', '!=', auth()->id()) as $u)
+                                        <option value="{{ $u->id }}">{{ $u->name }} ({{ $u->email }})</option>
+                                    @endforeach
+                                </select>
+                                <button type="submit"
+                                    onclick="return confirm('Grant superadmin to this user?')"
+                                    class="shrink-0 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors">
+                                    Promote
+                                </button>
+                            </form>
+
+                            <div class="overflow-x-auto">
+                            <table class="w-full min-w-[540px] text-sm">
+                                <thead>
+                                    <tr class="border-b border-gray-100">
+                                        <th class="text-left text-xs font-semibold text-gray-500 pb-2">User</th>
+                                        <th class="text-left text-xs font-semibold text-gray-500 pb-2">Email</th>
+                                        <th class="text-left text-xs font-semibold text-gray-500 pb-2">Workspaces</th>
+                                        <th class="text-left text-xs font-semibold text-gray-500 pb-2">Status</th>
+                                        <th class="text-right text-xs font-semibold text-gray-500 pb-2">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-50">
+                                    @foreach ($allUsers as $u)
+                                    <tr>
+                                        <td class="py-2.5 pr-4">
+                                            <div class="flex items-center gap-2">
+                                                <div class="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                                                    {{ strtoupper(substr($u->name, 0, 2)) }}
+                                                </div>
+                                                <span class="text-xs font-medium text-gray-800">{{ $u->name }}</span>
+                                            </div>
+                                        </td>
+                                        <td class="py-2.5 pr-4 text-xs text-gray-500">{{ $u->email }}</td>
+                                        <td class="py-2.5 pr-4 text-xs text-gray-500">{{ $u->workspaces_count }}</td>
+                                        <td class="py-2.5 pr-4">
+                                            <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full {{ $u->is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-600' }}">
+                                                {{ $u->is_active ? 'Active' : 'Inactive' }}
+                                            </span>
+                                        </td>
+                                        <td class="py-2.5 text-right">
+                                            <div class="flex items-center justify-end gap-2">
+                                                @if ($u->id !== auth()->id())
+                                                    <form method="POST" action="{{ route('settings.superadmin.toggle-user', $u) }}" class="inline">
+                                                        @csrf
+                                                        <button type="submit"
+                                                            onclick="return confirm('{{ $u->is_active ? 'Deactivate' : 'Activate' }} {{ $u->name }}?')"
+                                                            class="text-[10px] font-medium px-2.5 py-1 rounded-md border {{ $u->is_active ? 'border-rose-200 text-rose-600 hover:bg-rose-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50' }} transition-colors">
+                                                            {{ $u->is_active ? 'Deactivate' : 'Activate' }}
+                                                        </button>
+                                                    </form>
+                                                    <form method="POST" action="{{ route('settings.superadmin.demote', $u) }}" class="inline">
+                                                        @csrf @method('DELETE')
+                                                        <button type="submit"
+                                                            onclick="return confirm('Remove superadmin from {{ $u->name }}?')"
+                                                            class="text-[10px] font-medium px-2.5 py-1 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors">
+                                                            Remove SA
+                                                        </button>
+                                                    </form>
+                                                @else
+                                                    <span class="text-[10px] text-gray-300">you</span>
+                                                @endif
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                            </div>
+                        </div>
+
+                        <div class="{{ $sectionCard }}">
+                            <h4 class="text-sm font-semibold text-gray-900 mb-4">All Workspaces ({{ $allWorkspaces->count() }})</h4>
+                            <div class="overflow-x-auto">
+                            <table class="w-full min-w-[580px] text-sm">
+                                <thead>
+                                    <tr class="border-b border-gray-100">
+                                        <th class="text-left text-xs font-semibold text-gray-500 pb-2">Workspace</th>
+                                        <th class="text-left text-xs font-semibold text-gray-500 pb-2">Owner</th>
+                                        <th class="text-left text-xs font-semibold text-gray-500 pb-2">Members</th>
+                                        <th class="text-left text-xs font-semibold text-gray-500 pb-2">Plan</th>
+                                        <th class="text-left text-xs font-semibold text-gray-500 pb-2">Status</th>
+                                        <th class="text-right text-xs font-semibold text-gray-500 pb-2">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-50">
+                                    @foreach ($allWorkspaces as $ws)
+                                    <tr>
+                                        <td class="py-2.5 pr-4 text-xs font-medium text-gray-800">{{ $ws->name }}</td>
+                                        <td class="py-2.5 pr-4 text-xs text-gray-500">{{ $ws->owner?->name ?? '—' }}</td>
+                                        <td class="py-2.5 pr-4 text-xs text-gray-500">{{ $ws->members_count }}</td>
+                                        <td class="py-2.5 pr-4">
+                                            <form method="POST" action="{{ route('settings.superadmin.plan', $ws) }}" class="flex items-center gap-1" x-data>
+                                                @csrf
+                                                <select name="plan" onchange="this.form.submit()"
+                                                    class="text-[10px] border border-gray-200 rounded-md px-1.5 py-1 outline-none focus:ring-1 focus:ring-purple-500 bg-white text-gray-700">
+                                                    @foreach ($plans as $plan)
+                                                        <option value="{{ $plan }}" {{ $ws->plan === $plan ? 'selected' : '' }}>{{ ucfirst($plan) }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </form>
+                                        </td>
+                                        <td class="py-2.5 pr-4">
+                                            <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full {{ $ws->is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-600' }}">
+                                                {{ $ws->is_active ? 'Active' : 'Inactive' }}
+                                            </span>
+                                        </td>
+                                        <td class="py-2.5 text-right">
+                                            <form method="POST" action="{{ route('settings.superadmin.toggle-workspace', $ws) }}" class="inline">
+                                                @csrf
+                                                <button type="submit"
+                                                    onclick="return confirm('{{ $ws->is_active ? 'Deactivate' : 'Activate' }} workspace {{ $ws->name }}?')"
+                                                    class="text-[10px] font-medium px-2.5 py-1 rounded-md border {{ $ws->is_active ? 'border-rose-200 text-rose-600 hover:bg-rose-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50' }} transition-colors">
+                                                    {{ $ws->is_active ? 'Deactivate' : 'Activate' }}
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                            </div>
+                        </div>
+
+                    </div>
+                    @endif
                 </div>
         </div>
     </div>
