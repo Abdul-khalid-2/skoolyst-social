@@ -144,24 +144,38 @@
                                         <span class="text-sm text-gray-500">{{ $post->created_at?->toDateString() ?? '—' }}</span>
                                     </td>
                                     <td class="px-4 py-3.5">
-                                        <form
-                                            action="{{ route('posts.destroy', $post) }}"
-                                            method="post"
-                                            class="inline"
-                                            onsubmit="return confirm(@json(__('Delete this post?')));"
-                                        >
-                                            @csrf
-                                            @method('DELETE')
-                                            <button
-                                                type="submit"
-                                                class="p-1.5 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-md transition-colors"
-                                                title="{{ __('Delete') }}"
+                                        <div class="flex items-center justify-end gap-1">
+                                            @if ($post->status === 'scheduled')
+                                                <a
+                                                    href="{{ route('posts.scheduled.edit', $post) }}"
+                                                    class="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                                                    title="{{ __('Edit') }}"
+                                                >
+                                                    <svg class="w-[13px] h-[13px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke-linecap="round" stroke-linejoin="round"/>
+                                                        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke-linecap="round" stroke-linejoin="round"/>
+                                                    </svg>
+                                                </a>
+                                            @endif
+                                            <form
+                                                action="{{ route('posts.destroy', $post) }}"
+                                                method="post"
+                                                class="inline"
+                                                onsubmit="return confirm(@json(__('Delete this post?')));"
                                             >
-                                                <svg class="w-[13px] h-[13px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                                    <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6M19 6v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke-linecap="round" stroke-linejoin="round" />
-                                                </svg>
-                                            </button>
-                                        </form>
+                                                @csrf
+                                                @method('DELETE')
+                                                <button
+                                                    type="submit"
+                                                    class="p-1.5 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-md transition-colors"
+                                                    title="{{ __('Delete') }}"
+                                                >
+                                                    <svg class="w-[13px] h-[13px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                                        <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6M19 6v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke-linecap="round" stroke-linejoin="round" />
+                                                    </svg>
+                                                </button>
+                                            </form>
+                                        </div>
                                     </td>
                                 </tr>
                             @endforeach
