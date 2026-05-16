@@ -47,6 +47,9 @@ Route::middleware(['auth', 'workspace.context'])->group(function (): void {
         ->where('tab', 'workspace|profile|notifications|security|appearance|billing|integrations|roles|superadmin');
     Route::put('settings/workspace', [SettingsController::class, 'updateWorkspace'])->name('settings.workspace');
     Route::post('settings/facebook-data', [SettingsController::class, 'destroyFacebookData'])->name('settings.facebook-data.destroy');
+    Route::post('settings/members/invite',     [SettingsController::class, 'inviteMember'])    ->name('settings.members.invite');
+    Route::delete('settings/members/{user}',   [SettingsController::class, 'removeMember'])    ->name('settings.members.remove');
+    Route::put('settings/members/{user}/role', [SettingsController::class, 'updateMemberRole'])->name('settings.members.role');
     Route::get('profile', [ProfileController::class, 'index'])->name('profile');
     Route::put('profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');

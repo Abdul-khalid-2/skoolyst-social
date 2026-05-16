@@ -255,44 +255,236 @@
                 </aside>
 
                 <div class="min-w-0 space-y-6">
-                    <div x-show="active === 'workspace'" x-cloak>
-                        <div
-                            class="{{ $sectionCard }}"
-                        >
-                            <h3 class="{{ $sectionTitle }}">Workspace</h3>
+                    <div x-show="active === 'workspace'" x-cloak class="space-y-6">
+
+                        {{-- ── 1. Manage Workspace ─────────────────────────────────────────── --}}
+                        <div class="{{ $sectionCard }}">
+                            <h3 class="{{ $sectionTitle }}">Manage Workspace</h3>
                             <p class="{{ $sectionSub }} mb-5">Rename the current workspace. Requires owner or admin role.</p>
+
                             @if (! $workspace)
-                                <p class="text-sm text-gray-600">{{ __('No active workspace is available.') }}</p>
+                                <p class="text-sm text-gray-500">No active workspace.</p>
                             @elseif ($canEditWorkspace)
-                                <form method="post" action="{{ route('settings.workspace') }}">
-                                    @csrf
-                                    @method('PUT')
-                                    <div class="max-w-md">
-                                        <x-input
-                                            name="workspace_name"
-                                            label="Workspace name"
-                                            value="{{ old('workspace_name', $workspace->name) }}"
-                                        />
+                                @if (session('success'))
+                                    <div class="mb-4 px-4 py-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-lg">
+                                        {{ session('success') }}
                                     </div>
-                                    <div class="mt-4 flex justify-end">
-                                        <x-button type="submit" variant="primary" class="font-medium">Save workspace</x-button>
+                                @endif
+                                <form method="POST" action="{{ route('settings.workspace') }}">
+                                    @csrf @method('PUT')
+                                    <div class="max-w-md space-y-4">
+                                        <x-input name="workspace_name" label="Workspace name"
+                                                  value="{{ old('workspace_name', $workspace->name) }}" />
+                                    </div>
+                                    <div class="mt-5 flex justify-end">
+                                        <x-button type="submit" variant="primary">Save workspace</x-button>
                                     </div>
                                 </form>
                             @else
                                 <div class="max-w-md">
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Workspace name</label>
-                                    <input
-                                        type="text"
-                                        readonly
-                                        value="{{ e($workspace->name) }}"
-                                        class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700"
-                                    />
-                                    <p class="mt-2 text-xs text-gray-500">
-                                        {{ __('You do not have permission to rename this workspace.') }}
-                                    </p>
+                                    <input type="text" readonly value="{{ e($workspace->name) }}"
+                                           class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700" />
+                                    <p class="mt-2 text-xs text-gray-400">You do not have permission to rename this workspace.</p>
                                 </div>
                             @endif
                         </div>
+
+                        {{-- ── 2. Members ──────────────────────────────────────────────────── --}}
+                        <div class="{{ $sectionCard }}">
+                            <div class="flex items-center justify-between mb-5">
+                                <div>
+                                    <h3 class="{{ $sectionTitle }}">Members</h3>
+                                    <p class="{{ $sectionSub }}">{{ $members->count() }} member{{ $members->count() === 1 ? '' : 's' }} in this workspace.</p>
+                                </div>
+                            </div>
+
+                            {{-- Invite form --}}
+                            @if ($canInviteMembers)
+                            <div class="mb-5 p-4 bg-gray-50 rounded-xl border border-gray-200" x-data="{ open: false }">
+                                <button type="button" @click="open = !open"
+                                    class="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700">
+                                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                    <span x-show="!open">Invite member</span>
+                                    <span x-show="open" x-cloak>Cancel</span>
+                                </button>
+                                <form x-show="open" x-cloak method="POST" action="{{ route('settings.members.invite') }}"
+                                      class="mt-3 flex flex-wrap items-end gap-3">
+                                    @csrf
+                                    <div class="flex-1 min-w-[200px]">
+                                        <label class="block text-xs font-medium text-gray-600 mb-1">Email address</label>
+                                        <input type="email" name="email" value="{{ old('email') }}"
+                                               placeholder="colleague@example.com"
+                                               class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500" />
+                                        @error('invite_email')
+                                            <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
+                                        @enderror
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-600 mb-1">Role</label>
+                                        <select name="role"
+                                            class="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                                            <option value="editor" {{ old('role') === 'editor' ? 'selected' : '' }}>Editor</option>
+                                            <option value="admin"  {{ old('role') === 'admin'  ? 'selected' : '' }}>Admin</option>
+                                            <option value="viewer" {{ old('role') === 'viewer' ? 'selected' : '' }}>Viewer</option>
+                                        </select>
+                                    </div>
+                                    <button type="submit"
+                                        class="text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+                                        Send Invite
+                                    </button>
+                                </form>
+                            </div>
+                            @endif
+
+                            {{-- Members list --}}
+                            <div class="divide-y divide-gray-100">
+                                @forelse ($members as $member)
+                                @php
+                                    $memberRole  = $member->pivot->role;
+                                    $memberOwner = $member->id === $workspace->owner_id;
+                                    $badgeCls    = match($memberRole) {
+                                        'owner'  => 'bg-purple-100 text-purple-700',
+                                        'admin'  => 'bg-blue-100 text-blue-700',
+                                        'editor' => 'bg-gray-100 text-gray-600',
+                                        default  => 'bg-gray-100 text-gray-500',
+                                    };
+                                @endphp
+                                <div class="flex items-center gap-3 py-3 flex-wrap">
+                                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                                        {{ strtoupper(substr($member->name, 0, 2)) }}
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-sm font-medium text-gray-900 truncate">
+                                            {{ $member->name }}
+                                            @if ($member->id === $user->id)
+                                                <span class="text-xs text-gray-400 font-normal">(you)</span>
+                                            @endif
+                                        </p>
+                                        <p class="text-xs text-gray-400 truncate">{{ $member->email }}</p>
+                                    </div>
+                                    @if ($memberOwner || ! $canEditWorkspace)
+                                        <span class="text-xs font-semibold px-2.5 py-1 rounded-full {{ $badgeCls }}">
+                                            {{ ucfirst($memberRole) }}
+                                        </span>
+                                    @else
+                                        <form method="POST" action="{{ route('settings.members.role', $member) }}">
+                                            @csrf @method('PUT')
+                                            <select name="role" onchange="this.form.submit()"
+                                                class="text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-700">
+                                                @foreach (['admin', 'editor', 'viewer'] as $r)
+                                                    <option value="{{ $r }}" {{ $memberRole === $r ? 'selected' : '' }}>{{ ucfirst($r) }}</option>
+                                                @endforeach
+                                            </select>
+                                        </form>
+                                    @endif
+                                    @if ($canRemoveMembers && ! $memberOwner && $member->id !== $user->id)
+                                        <form method="POST" action="{{ route('settings.members.remove', $member) }}">
+                                            @csrf @method('DELETE')
+                                            <button type="submit"
+                                                onclick="return confirm('Remove {{ $member->name }} from this workspace?')"
+                                                class="p-1.5 text-gray-300 hover:text-rose-500 hover:bg-rose-50 rounded-md transition-colors"
+                                                title="Remove member">
+                                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                                                </svg>
+                                            </button>
+                                        </form>
+                                    @endif
+                                </div>
+                                @empty
+                                    <p class="text-sm text-gray-400 py-4 text-center">No members yet.</p>
+                                @endforelse
+                            </div>
+                        </div>
+
+                        {{-- ── 3. Billing ──────────────────────────────────────────────────── --}}
+                        <div class="{{ $sectionCard }}">
+                            <h3 class="{{ $sectionTitle }} mb-1">Billing & Plan</h3>
+                            <p class="{{ $sectionSub }} mb-5">Current plan and subscription status for this workspace.</p>
+
+                            @if ($subscription)
+                            @php
+                                $planColors = [
+                                    'free'       => 'from-gray-500 to-gray-600',
+                                    'starter'    => 'from-blue-500 to-cyan-500',
+                                    'pro'        => 'from-indigo-600 to-violet-600',
+                                    'enterprise' => 'from-amber-500 to-orange-600',
+                                ];
+                                $gradient  = $planColors[$subscription->plan] ?? $planColors['free'];
+                                $statusCls = match($subscription->status) {
+                                    'active'    => 'bg-emerald-100 text-emerald-700',
+                                    'trialing'  => 'bg-blue-100 text-blue-700',
+                                    'cancelled' => 'bg-rose-100 text-rose-600',
+                                    default     => 'bg-gray-100 text-gray-600',
+                                };
+                            @endphp
+                            <div class="relative overflow-hidden rounded-xl bg-gradient-to-br {{ $gradient }} p-5 text-white mb-5">
+                                <div class="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-white/10 blur-xl"></div>
+                                <div class="relative flex items-center justify-between gap-3">
+                                    <div>
+                                        <p class="text-xs font-medium text-white/70 uppercase tracking-widest">Current Plan</p>
+                                        <p class="text-2xl font-bold mt-0.5">{{ ucfirst($subscription->plan) }}</p>
+                                    </div>
+                                    <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-white/20 text-white">
+                                        {{ ucfirst($subscription->status) }}
+                                    </span>
+                                </div>
+                                <div class="relative mt-3 flex gap-4 text-xs text-white/70">
+                                    <span>Started {{ \Carbon\Carbon::parse($subscription->started_at)->format('M d, Y') }}</span>
+                                    @if ($subscription->expires_at)
+                                        <span>Expires {{ \Carbon\Carbon::parse($subscription->expires_at)->format('M d, Y') }}</span>
+                                    @endif
+                                </div>
+                            </div>
+                            @else
+                            <div class="relative overflow-hidden rounded-xl bg-gradient-to-br from-gray-500 to-gray-600 p-5 text-white mb-5">
+                                <p class="text-xs font-medium text-white/70 uppercase tracking-widest">Current Plan</p>
+                                <p class="text-2xl font-bold mt-0.5">{{ ucfirst($workspace->plan ?? 'Free') }}</p>
+                            </div>
+                            @endif
+
+                            @php
+                                $planFeatures = [
+                                    'free'       => ['5 scheduled posts', '2 social accounts', '1 workspace member'],
+                                    'starter'    => ['50 scheduled posts', '5 social accounts', '3 workspace members', 'Analytics'],
+                                    'pro'        => ['Unlimited posts', '10 social accounts', '10 workspace members', 'Analytics + Export', 'Priority support'],
+                                    'enterprise' => ['Unlimited everything', 'Unlimited members', 'Custom integrations', 'Dedicated support'],
+                                ];
+                                $currentPlan = $subscription?->plan ?? $workspace?->plan ?? 'free';
+                                $features    = $planFeatures[$currentPlan] ?? $planFeatures['free'];
+                            @endphp
+                            <ul class="space-y-2 mb-5">
+                                @foreach ($features as $feature)
+                                    <li class="flex items-center gap-2 text-sm text-gray-700">
+                                        <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+                                        </svg>
+                                        {{ $feature }}
+                                    </li>
+                                @endforeach
+                            </ul>
+
+                            @if ($canManageBilling)
+                                <div class="flex flex-wrap gap-3 pt-4 border-t border-gray-100">
+                                    <a href="#" class="text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+                                        Upgrade Plan
+                                    </a>
+                                    @if ($subscription && $subscription->status === 'active')
+                                        <a href="#" class="text-sm font-medium border border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-800 px-4 py-2 rounded-lg transition-colors">
+                                            Manage Billing
+                                        </a>
+                                    @endif
+                                </div>
+                            @else
+                                <p class="text-xs text-gray-400 pt-4 border-t border-gray-100">
+                                    Contact the workspace owner to manage billing.
+                                </p>
+                            @endif
+                        </div>
+
                     </div>
 
                     <div x-show="active === 'profile'" x-cloak>
