@@ -34,7 +34,7 @@ class ProfileController extends Controller
         );
 
         return redirect()
-            ->back(fallback: route('profile'))
+            ->route('settings.tab', 'profile')
             ->with('success', __('Profile updated successfully.'));
     }
 
@@ -47,7 +47,7 @@ class ProfileController extends Controller
         );
 
         return redirect()
-            ->back(fallback: route('profile'))
+            ->route('settings.tab', 'security')
             ->with('success', __('Password changed successfully.'));
     }
 }

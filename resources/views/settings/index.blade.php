@@ -11,25 +11,13 @@
     } else {
         $initials = strtoupper(substr($parts[0] ?? 'U', 0, 2));
     }
-    if ($errors->has('workspace_name')) {
-        $defaultSection = 'workspace';
-    } elseif ($errors->hasAny(['name', 'email', 'timezone'])) {
-        $defaultSection = 'profile';
-    } elseif ($errors->hasAny(['current_password', 'password', 'password_confirmation'])) {
-        $defaultSection = 'security';
-    } elseif ($errors->has('confirm')) {
-        $defaultSection = 'integrations';
-    } else {
-        $defaultSection = 'workspace';
-    }
-    $sectionCard =
-        'group relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-6 sm:p-7 shadow-sm transition duration-200 hover:border-gray-300 hover:shadow';
+    $sectionCard  = 'group relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-6 sm:p-7 shadow-sm transition duration-200 hover:border-gray-300 hover:shadow';
     $sectionTitle = 'text-base font-semibold tracking-tight text-gray-900';
-    $sectionSub = 'mt-1 text-sm leading-relaxed text-gray-500';
+    $sectionSub   = 'mt-1 text-sm leading-relaxed text-gray-500';
 @endphp
 
 @section('content')
-    <div class="min-h-full w-full min-w-0" x-data="{ active: '{{ $defaultSection }}' }">
+    <div class="min-h-full w-full min-w-0" x-data="{ active: '{{ $tab }}' }">
         <div
             class="grid w-full min-w-0 max-w-6xl mx-auto grid-cols-1 items-start gap-8 lg:grid-cols-[16rem_minmax(0,1fr)] lg:gap-10"
         >
@@ -45,7 +33,7 @@
                 >
                         <button
                             type="button"
-                            @click="active = 'workspace'"
+                            @click="active = 'workspace'; history.pushState(null, '', '{{ route('settings.tab', 'workspace') }}')"
                             class="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-all duration-200"
                             :class="active === 'workspace' ? 'bg-blue-50 text-blue-900 shadow-sm border border-blue-200/80' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 border border-transparent'"
                         >
@@ -72,7 +60,7 @@
                         </button>
                         <button
                             type="button"
-                            @click="active = 'profile'"
+                            @click="active = 'profile'; history.pushState(null, '', '{{ route('settings.tab', 'profile') }}')"
                             class="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-all duration-200"
                             :class="active === 'profile' ? 'bg-blue-50 text-blue-900 shadow-sm border border-blue-200/80' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 border border-transparent'"
                         >
@@ -99,7 +87,7 @@
                         </button>
                         <button
                             type="button"
-                            @click="active = 'notifications'"
+                            @click="active = 'notifications'; history.pushState(null, '', '{{ route('settings.tab', 'notifications') }}')"
                             class="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-all duration-200"
                             :class="active === 'notifications' ? 'bg-blue-50 text-blue-900 shadow-sm border border-blue-200/80' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 border border-transparent'"
                         >
@@ -126,7 +114,7 @@
                         </button>
                         <button
                             type="button"
-                            @click="active = 'security'"
+                            @click="active = 'security'; history.pushState(null, '', '{{ route('settings.tab', 'security') }}')"
                             class="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-all duration-200"
                             :class="active === 'security' ? 'bg-blue-50 text-blue-900 shadow-sm border border-blue-200/80' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 border border-transparent'"
                         >
@@ -153,7 +141,7 @@
                         </button>
                         <button
                             type="button"
-                            @click="active = 'appearance'"
+                            @click="active = 'appearance'; history.pushState(null, '', '{{ route('settings.tab', 'appearance') }}')"
                             class="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-all duration-200"
                             :class="active === 'appearance' ? 'bg-blue-50 text-blue-900 shadow-sm border border-blue-200/80' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 border border-transparent'"
                         >
@@ -180,7 +168,7 @@
                         </button>
                         <button
                             type="button"
-                            @click="active = 'billing'"
+                            @click="active = 'billing'; history.pushState(null, '', '{{ route('settings.tab', 'billing') }}')"
                             class="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-all duration-200"
                             :class="active === 'billing' ? 'bg-blue-50 text-blue-900 shadow-sm border border-blue-200/80' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 border border-transparent'"
                         >
@@ -207,7 +195,7 @@
                         </button>
                         <button
                             type="button"
-                            @click="active = 'integrations'"
+                            @click="active = 'integrations'; history.pushState(null, '', '{{ route('settings.tab', 'integrations') }}')"
                             class="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-all duration-200"
                             :class="active === 'integrations' ? 'bg-blue-50 text-blue-900 shadow-sm border border-blue-200/80' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 border border-transparent'"
                         >
@@ -234,7 +222,7 @@
                         </button>
 
                         @if ($isOwner)
-                        <button type="button" @click="active = 'roles'"
+                        <button type="button" @click="active = 'roles'; history.pushState(null, '', '{{ route('settings.tab', 'roles') }}')"
                             class="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-all duration-200"
                             :class="active === 'roles' ? 'bg-blue-50 text-blue-900 shadow-sm border border-blue-200/80' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 border border-transparent'">
                             <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
@@ -249,7 +237,7 @@
                         @endif
 
                         @if ($isSuperadmin)
-                        <button type="button" @click="active = 'superadmin'"
+                        <button type="button" @click="active = 'superadmin'; history.pushState(null, '', '{{ route('settings.tab', 'superadmin') }}')"
                             class="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-all duration-200"
                             :class="active === 'superadmin' ? 'bg-purple-50 text-purple-900 shadow-sm border border-purple-200/80' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 border border-transparent'">
                             <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"

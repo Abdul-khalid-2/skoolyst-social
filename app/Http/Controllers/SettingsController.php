@@ -17,8 +17,13 @@ class SettingsController extends Controller
         private readonly FacebookDataDeletionService $facebookDataDeletion,
     ) {}
 
-    public function index(Request $request): View
+    public function index(Request $request, string $tab = 'workspace'): View
     {
+        $validTabs = ['workspace', 'profile', 'notifications', 'security', 'appearance', 'billing', 'integrations'];
+        if (! in_array($tab, $validTabs) && ! in_array($tab, ['roles', 'superadmin'])) {
+            $tab = 'workspace';
+        }
+
         $user             = $request->user();
         $workspace        = $this->workspaceSettings->getCurrentWorkspace($user);
         $canEditWorkspace = $workspace && $this->workspaceSettings->userCanEditWorkspaceName($user, $workspace);
@@ -67,7 +72,8 @@ class SettingsController extends Controller
             'isOwner', 'isSuperadmin',
             'roles', 'allPermissions', 'permissionGroups',
             'allUsers', 'allWorkspaces', 'plans',
-            'title', 'description'
+            'title', 'description',
+            'tab'
         ));
     }
 
@@ -77,7 +83,7 @@ class SettingsController extends Controller
         $workspace = $this->workspaceSettings->getCurrentWorkspace($user);
         if ($workspace === null) {
             return redirect()
-                ->route('settings')
+                ->route('settings.tab', 'workspace')
                 ->with('error', __('No workspace found.'));
         }
 
@@ -88,7 +94,7 @@ class SettingsController extends Controller
         );
 
         return redirect()
-            ->route('settings')
+            ->route('settings.tab', 'workspace')
             ->with('success', __('Workspace updated.'));
     }
 
@@ -97,7 +103,7 @@ class SettingsController extends Controller
         $code = $this->facebookDataDeletion->purgeForAuthenticatedUser($request->user());
         if ($code === null) {
             return redirect()
-                ->route('settings')
+                ->route('settings.tab', 'integrations')
                 ->with('error', __('No Facebook-linked data is stored for this account.'));
         }
 
