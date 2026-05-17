@@ -11,7 +11,7 @@ use Throwable;
 
 class SocialAccountProvisioner
 {
-    private const FACEBOOK_PAGE_FIELDS = 'id,name,access_token,fan_count,followers_count,picture,likes.limit(0).summary(true),instagram_business_account{id,username,profile_picture_url,name,followers_count,follows_count,media_count}';
+    private const FACEBOOK_PAGE_FIELDS = 'id,name,access_token,fan_count,followers_count,posts.limit(0).summary(true),picture,instagram_business_account{id,username,profile_picture_url,name,followers_count,follows_count,media_count}';
 
     public static function ensureForWorkspace(Workspace $workspace): void
     {
@@ -98,8 +98,8 @@ class SocialAccountProvisioner
                     'token_expires_at' => $expiresAt,
                     'followers_count' => (int) ($page['followers_count'] ?? 0),
                     'fan_count' => (int) ($page['fan_count'] ?? 0),
-                    'following_count' => self::pageFollowingCountFromLikesEdge($page),
-                    'posts_count' => 0,
+                    'following_count' => ($pageToken !== '') ? self::fetchPageFollowingCount($graphVersion, $pageId, $pageToken) : 0,
+                    'posts_count' => self::fetchPagePostsCount($page),
                     'is_connected' => true,
                 ],
             );
@@ -314,6 +314,52 @@ class SocialAccountProvisioner
         return $items;
     }
 
+    /**
+     * @param  array<string, mixed>  $page
+     */
+    public static function fetchPagePostsCount(array $page): int
+    {
+        $posts = $page['posts'] ?? null;
+        if (! is_array($posts)) {
+            return 0;
+        }
+
+        return (int) (($posts['summary'] ?? [])['total_count'] ?? 0);
+    }
+
+    private static function fetchPageFollowingCount(string $graphVersion, string $pageId, string $pageAccessToken): int
+    {
+        try {
+            $response = Http::timeout(15)->get(
+                "https://graph.facebook.com/{$graphVersion}/{$pageId}/likes",
+                [
+                    'summary' => 'true',
+                    'limit' => 0,
+                    'access_token' => $pageAccessToken,
+                ]
+            );
+
+            if (! $response->successful()) {
+                Log::warning('Facebook page following count unavailable', [
+                    'page_id' => $pageId,
+                    'status' => $response->status(),
+                ]);
+
+                return 0;
+            }
+
+            return (int) ($response->json('summary.total_count') ?? 0);
+        } catch (Throwable $e) {
+            Log::warning('Facebook page following count fetch failed', [
+                'page_id' => $pageId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return 0;
+        }
+    }
+
+    /** @deprecated Following count is now fetched via fetchPageFollowingCount() using the page access token. */
     public static function pageFollowingCountFromLikesEdge(mixed $page): int
     {
         if (! is_array($page)) {

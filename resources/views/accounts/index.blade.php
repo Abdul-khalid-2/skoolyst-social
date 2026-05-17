@@ -102,8 +102,18 @@
                                                         · {{ $fol }} {{ __('followers') }}
                                                         · {{ $ing }} {{ __('following') }}
                                                     @elseif ($ph === 'facebook')
-                                                        · {{ $fol }} {{ __('followers') }}
-                                                        · {{ $ing }} {{ __('following') }}
+                                                        @php
+                                                            $folCount = (int) $acc->followers_count;
+                                                            $ingCount = (int) $acc->following_count;
+                                                            $posCount = (int) $acc->posts_count;
+                                                        @endphp
+                                                        · {{ number_format($folCount) }} {{ __('followers') }}
+                                                        @if ($ingCount > 0)
+                                                            · {{ number_format($ingCount) }} {{ __('following') }}
+                                                        @endif
+                                                        @if ($posCount > 0)
+                                                            · {{ number_format($posCount) }} {{ __('posts') }}
+                                                        @endif
                                                     @else
                                                         · {{ $fol }} {{ __('followers') }}
                                                     @endif
@@ -117,20 +127,35 @@
                                                     <p class="text-xs text-red-600 mt-1">{{ __('Token expired. Reconnect required.') }}</p>
                                                 @endif
                                             </div>
-                                            <form
-                                                method="post"
-                                                action="{{ route('accounts.connections.destroy', $acc) }}"
-                                                class="shrink-0"
-                                            >
-                                                @csrf
-                                                @method('DELETE')
-                                                <button
-                                                    type="submit"
-                                                    class="border border-red-300 text-red-600 hover:bg-red-50 text-xs font-semibold px-4 py-2 rounded-xl active:scale-95 transition-all disabled:opacity-60"
+                                            <div class="flex items-center gap-2 shrink-0">
+                                                @if ($platform->slug === 'facebook' && $acc->platform_page_id)
+                                                    <form method="POST" action="{{ route('accounts.refresh-stats', $acc) }}">
+                                                        @csrf
+                                                        <button
+                                                            type="submit"
+                                                            title="{{ __('Refresh follower/following counts') }}"
+                                                            class="p-1.5 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                                        >
+                                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                                                            </svg>
+                                                        </button>
+                                                    </form>
+                                                @endif
+                                                <form
+                                                    method="post"
+                                                    action="{{ route('accounts.connections.destroy', $acc) }}"
                                                 >
-                                                    {{ __('Disconnect') }}
-                                                </button>
-                                            </form>
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button
+                                                        type="submit"
+                                                        class="border border-red-300 text-red-600 hover:bg-red-50 text-xs font-semibold px-4 py-2 rounded-xl active:scale-95 transition-all disabled:opacity-60"
+                                                    >
+                                                        {{ __('Disconnect') }}
+                                                    </button>
+                                                </form>
+                                            </div>
                                         </div>
                                     @endforeach
                                 </div>

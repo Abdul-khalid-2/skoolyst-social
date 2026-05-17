@@ -219,7 +219,7 @@ class SocialAccountController extends Controller
         }
 
         $graphVersion = (string) config('services.facebook.graph_version', 'v24.0');
-        $pageFields = 'id,name,access_token,fan_count,followers_count,picture,likes.limit(0).summary(true),instagram_business_account{id,username,profile_picture_url,name,followers_count,follows_count,media_count}';
+        $pageFields = 'id,name,access_token,fan_count,followers_count,posts.limit(0).summary(true),picture,instagram_business_account{id,username,profile_picture_url,name,followers_count,follows_count,media_count}';
         $res = Http::timeout(20)->get("https://graph.facebook.com/{$graphVersion}/me/accounts", [
             'fields' => $pageFields,
             'access_token' => $userToken,
@@ -272,8 +272,8 @@ class SocialAccountController extends Controller
                 'access_token' => $pageToken,
                 'fan_count' => $direct->json('fan_count'),
                 'followers_count' => $direct->json('followers_count'),
+                'posts' => $direct->json('posts'),
                 'picture' => $direct->json('picture'),
-                'likes' => $direct->json('likes'),
                 'instagram_business_account' => $direct->json('instagram_business_account'),
             ];
         } elseif (! is_array($selectedPage)) {
@@ -302,7 +302,7 @@ class SocialAccountController extends Controller
                 'followers_count' => (int) ($selectedPage['followers_count'] ?? 0),
                 'fan_count' => (int) ($selectedPage['fan_count'] ?? 0),
                 'following_count' => SocialAccountProvisioner::pageFollowingCountFromLikesEdge($selectedPage),
-                'posts_count' => 0,
+                'posts_count' => SocialAccountProvisioner::fetchPagePostsCount($selectedPage),
                 'is_connected' => true,
             ],
         );
