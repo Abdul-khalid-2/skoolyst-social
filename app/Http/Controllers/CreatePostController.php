@@ -51,12 +51,14 @@ class CreatePostController extends Controller
             ->values();
 
         // Paused accounts — connected but is_active=false; shown greyed in UI
-        $pausedSlugs = $accounts
-            ->filter(fn (SocialAccount $a) => ! $a->is_active)
-            ->map(fn (SocialAccount $a) => (string) $a->platform?->slug)
-            ->diff($connectedSlugs)  // exclude if any active account exists for same platform
-            ->unique()
-            ->values();
+        $pausedSlugs = collect(
+            $accounts
+                ->filter(fn (SocialAccount $a) => ! $a->is_active)
+                ->map(fn (SocialAccount $a) => (string) $a->platform?->slug)
+                ->toArray()
+        )->diff($connectedSlugs)  // base Collection::diff() — works with plain strings
+         ->unique()
+         ->values();
 
         return view('posts.create', [
             'workspace' => $workspace,
