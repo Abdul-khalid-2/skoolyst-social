@@ -3,12 +3,14 @@
 namespace App\Services;
 
 use App\Models\SocialAccount;
+use App\Traits\ResolvesMediaPath;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class LinkedInPostService
 {
+    use ResolvesMediaPath;
     private const LINKEDIN_VERSION = '202406';
     private const LINKEDIN_API_BASE = 'https://api.linkedin.com/v2/';
 
@@ -277,26 +279,34 @@ class LinkedInPostService
 
     private function uploadImageToLinkedIn(string $uploadUrl, string $imageUrl): void
     {
-        $path = str_replace(url('/storage'), storage_path('app/public'), $imageUrl);
+        $path = $this->resolveMediaPath($imageUrl);
 
-        if (! file_exists($path)) {
-            throw new \RuntimeException('Image file not found: '.$path);
+        if ($path === null || ! file_exists($path)) {
+            throw new \RuntimeException(
+                'Image file not found. URL: '.$imageUrl.' | Resolved path: '.($path ?? 'null')
+            );
         }
 
-        Http::withBody(fopen($path, 'r'), 'image/jpeg')
+        $mime = mime_content_type($path) ?: 'image/jpeg';
+
+        Http::withBody(fopen($path, 'r'), $mime)
             ->withoutRedirecting()
             ->put($uploadUrl);
     }
 
     private function uploadVideoToLinkedIn(string $uploadUrl, string $videoUrl): void
     {
-        $path = str_replace(url('/storage'), storage_path('app/public'), $videoUrl);
+        $path = $this->resolveMediaPath($videoUrl);
 
-        if (! file_exists($path)) {
-            throw new \RuntimeException('Video file not found: '.$path);
+        if ($path === null || ! file_exists($path)) {
+            throw new \RuntimeException(
+                'Video file not found. URL: '.$videoUrl.' | Resolved path: '.($path ?? 'null')
+            );
         }
 
-        Http::withBody(fopen($path, 'r'), 'video/mp4')
+        $mime = mime_content_type($path) ?: 'video/mp4';
+
+        Http::withBody(fopen($path, 'r'), $mime)
             ->withoutRedirecting()
             ->put($uploadUrl);
     }
