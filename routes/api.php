@@ -46,7 +46,7 @@ Route::middleware(['web', 'auth', 'workspace.context', 'throttle:60,1'])->group(
     Route::delete('/workspaces/{workspace}/social-platforms/{platformSlug}/disconnect', [SocialAccountController::class, 'disconnectPlatform'])->whereNumber('workspace');
     Route::get('/workspaces/{workspace}/posts', [PostController::class, 'index'])->whereNumber('workspace');
     Route::post('/workspaces/{workspace}/posts', [PostController::class, 'store'])->whereNumber('workspace');
-    Route::patch('/workspaces/{workspace}/posts/{post}', [PostController::class, 'update'])->whereNumber('workspace')->whereNumber('post');
+    Route::match(['put', 'patch'], '/workspaces/{workspace}/posts/{post}', [PostController::class, 'update'])->whereNumber('workspace')->whereNumber('post');
     Route::delete('/workspaces/{workspace}/posts/{post}', [PostController::class, 'destroy'])->whereNumber('workspace')->whereNumber('post');
     Route::post('/posts/publish', [SocialPostController::class, 'publish']);
     Route::get('/social/accounts', [SocialPostController::class, 'getSocialAccounts']);

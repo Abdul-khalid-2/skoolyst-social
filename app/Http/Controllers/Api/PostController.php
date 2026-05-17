@@ -133,9 +133,11 @@ class PostController extends Controller
         $this->authorize('update', $post);
 
         $validated = $request->validate([
-            'caption' => ['sometimes', 'string', 'min:1', 'max:2200'],
-            'action' => ['sometimes', 'string', Rule::in(['draft', 'publish_now', 'reschedule'])],
+            'caption'      => ['sometimes', 'string', 'min:1', 'max:2200'],
+            'action'       => ['sometimes', 'string', Rule::in(['draft', 'publish_now', 'reschedule'])],
             'scheduled_at' => ['nullable', 'date', 'after:now'],
+            'remove_media' => ['sometimes', 'boolean'],
+            'media'        => ['sometimes', 'nullable', 'file', 'mimes:jpeg,jpg,png,gif,webp,mp4', 'max:51200'],
         ]);
 
         if (($validated['action'] ?? null) === 'reschedule' && empty($validated['scheduled_at'])) {
@@ -169,6 +171,42 @@ class PostController extends Controller
         }
 
         $post->save();
+
+        // Handle media replacement / removal
+        $shouldRemove = $request->boolean('remove_media') || $request->hasFile('media');
+        if ($shouldRemove) {
+            $post->load('postMedia');
+            foreach ($post->postMedia as $oldMedia) {
+                $oldPath = $this->resolveStoragePath($oldMedia->url);
+                if ($oldPath && file_exists($oldPath)) {
+                    @unlink($oldPath);
+                }
+                $oldMedia->delete();
+            }
+        }
+
+        if ($request->hasFile('media')) {
+            $file = $request->file('media');
+            $dir  = 'workspaces/'.$workspace->id.'/posts/'.$post->id;
+            $ext  = $file->getClientOriginalExtension() !== ''
+                        ? $file->getClientOriginalExtension()
+                        : (str_starts_with($file->getMimeType() ?? '', 'video/') ? 'mp4' : 'bin');
+            $name = (string) Str::uuid().'.'.$ext;
+            $path = $file->storeAs($dir, $name, 'public');
+            $mime = $file->getMimeType() ?? 'application/octet-stream';
+            $type = $this->mapMediaType($mime, (string) $file->getClientOriginalName());
+
+            PostMedia::query()->create([
+                'post_id'        => $post->id,
+                'media_asset_id' => null,
+                'url'            => URL::to(Storage::disk('public')->url($path)),
+                'type'           => $type,
+                'size'           => $file->getSize() ?: 0,
+                'mime_type'      => $mime,
+                'sort_order'     => 0,
+            ]);
+        }
+
         $post->load(['author', 'postMedia', 'postTargets.socialPlatform', 'postTargets.socialAccount']);
 
         return response()->json($this->formatPost($post));
@@ -465,6 +503,21 @@ class PostController extends Controller
                 'error_message' => $t->error_message,
             ])->values()->all(),
         ];
+    }
+
+    private function resolveStoragePath(string $url): ?string
+    {
+        $urlPath = parse_url($url, PHP_URL_PATH);
+        if (! is_string($urlPath)) {
+            return null;
+        }
+        $rel = ltrim($urlPath, '/');
+
+        if (str_starts_with($rel, 'storage/')) {
+            return storage_path('app/public/'.substr($rel, strlen('storage/')));
+        }
+
+        return public_path($rel);
     }
 
     private function assertPostInWorkspace(Workspace $workspace, Post $post): void
