@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\SocialAccount;
+use App\Traits\ResolvesMediaPath;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
 use Illuminate\Support\Facades\Log;
@@ -10,6 +11,7 @@ use Throwable;
 
 class SocialPostService
 {
+    use ResolvesMediaPath;
     public function postToFacebook(string $message, ?string $link = null): array
     {
         $version = (string) env('META_API_VERSION', 'v21.0');
@@ -68,10 +70,18 @@ class SocialPostService
         $options = [];
 
         if ($mediaUrl) {
-            // We need to upload the file directly because Ngrok blocks Facebook from downloading it via URL
-            $path = str_replace(url('/storage'), storage_path('app/public'), $mediaUrl);
-            
-            if (file_exists($path)) {
+            $path = $this->resolveMediaPath($mediaUrl);
+
+            Log::info('Facebook publish media debug', [
+                'mediaUrl'           => $mediaUrl,
+                'resolvedPath'       => $path,
+                'fileExists'         => $path ? file_exists($path) : false,
+                'storage_app_public' => storage_path('app/public'),
+                'public_path'        => public_path(),
+                'app_url'            => config('app.url'),
+            ]);
+
+            if ($path !== null && file_exists($path)) {
                 if ($mediaType === 'video') {
                     $endpoint = "{$pageId}/videos";
                     $options['multipart'] = [
@@ -96,7 +106,19 @@ class SocialPostService
                     ];
                 }
             } else {
-                return ['success' => false, 'error' => 'Media file not found on server.'];
+                Log::error('Media file not found', [
+                    'mediaUrl'     => $mediaUrl,
+                    'resolvedPath' => $path,
+                    'exists'       => $path ? file_exists($path) : false,
+                    'public_path'  => public_path(),
+                    'storage_path' => storage_path('app/public'),
+                    'cwd'          => getcwd(),
+                ]);
+
+                return [
+                    'success' => false,
+                    'error'   => 'Media file not found. URL: '.$mediaUrl.' | Path tried: '.($path ?? 'null'),
+                ];
             }
         } else {
             $form = [

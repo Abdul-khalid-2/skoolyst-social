@@ -41,7 +41,8 @@ Route::middleware(['auth', 'workspace.context'])->group(function (): void {
     Route::delete('posts/{post}', [PostsController::class, 'destroy'])->name('posts.destroy');
     Route::get('accounts', [AccountsController::class, 'index'])->name('accounts');
     Route::delete('accounts/connections/{account}', [AccountsController::class, 'destroyConnection'])->name('accounts.connections.destroy');
-    Route::post('accounts/{account}/refresh-stats', [AccountsController::class, 'refreshStats'])->name('accounts.refresh-stats');
+    Route::patch('accounts/connections/{account}/toggle-active', [AccountsController::class, 'toggleActive'])->name('accounts.connections.toggle-active');
+    Route::post('accounts/connections/{account}/refresh-stats', [AccountsController::class, 'refreshStats'])->name('accounts.connections.refresh-stats');
     Route::get('analytics', [\App\Http\Controllers\AnalyticsController::class, 'index'])->name('analytics');
     Route::get('settings',        [SettingsController::class, 'index'])->name('settings');
     Route::get('settings/{tab}',  [SettingsController::class, 'index'])->name('settings.tab')

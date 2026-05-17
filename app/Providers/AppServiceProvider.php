@@ -10,6 +10,7 @@ use App\Policies\PostPolicy;
 use App\Policies\SocialAccountPolicy;
 use App\Policies\WorkspacePolicy;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -27,6 +28,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        if (! file_exists(public_path('storage'))) {
+            Log::warning('Storage symlink missing. Run: php artisan storage:link');
+        }
+
         Gate::policy(Post::class, PostPolicy::class);
         Gate::policy(Workspace::class, WorkspacePolicy::class);
         Gate::policy(SocialAccount::class, SocialAccountPolicy::class);

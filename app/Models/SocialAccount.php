@@ -25,6 +25,7 @@ class SocialAccount extends Model
         'following_count',
         'posts_count',
         'is_connected',
+        'is_active',
         'meta',
     ];
 
@@ -39,6 +40,7 @@ class SocialAccount extends Model
             'following_count' => 'integer',
             'posts_count' => 'integer',
             'is_connected' => 'boolean',
+            'is_active'    => 'boolean',
         ];
     }
 

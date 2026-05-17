@@ -81,41 +81,42 @@
                             </p>
 
                             @if ($row->connected)
-                                <div class="space-y-4">
+                                <div class="space-y-1">
                                     @foreach ($connectedAccounts as $acc)
                                         @php
-                                            $rowSt = $accountsHelper->accountRowStatus($acc);
+                                            $rowSt    = $accountsHelper->accountRowStatus($acc);
+                                            $ph       = $platform->slug;
+                                            $isActive = (bool) $acc->is_active;
+                                            $folCount = (int) $acc->followers_count;
+                                            $ingCount = (int) $acc->following_count;
+                                            $posCount = (int) $acc->posts_count;
                                         @endphp
-                                        <div class="flex items-center justify-between gap-3">
-                                            <div>
-                                                <p class="text-sm font-semibold text-gray-900">{{ $acc->account_name ?? $platform->name }}</p>
-                                                <p class="text-xs text-gray-500">
-                                                    @php
-                                                        $ph = $platform->slug;
-                                                        $posts = (int) $acc->posts_count;
-                                                        $fol = (int) $acc->followers_count;
-                                                        $ing = (int) $acc->following_count;
-                                                    @endphp
+                                        <div class="flex items-start justify-between gap-3 py-2 border-t border-gray-100 first:border-t-0">
+                                            {{-- Left: account info --}}
+                                            <div class="flex-1 min-w-0">
+                                                <div class="flex items-center gap-2">
+                                                    <p class="text-sm font-semibold text-gray-900 truncate">
+                                                        {{ $acc->account_name ?? $platform->name }}
+                                                    </p>
+                                                    @if (! $isActive)
+                                                        <span class="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                                                            {{ __('Paused') }}
+                                                        </span>
+                                                    @endif
+                                                </div>
+                                                <p class="text-xs text-gray-500 mt-0.5">
                                                     {{ $acc->account_handle ?: __('Connected account') }}
                                                     @if ($ph === 'instagram')
-                                                        · {{ $posts }} {{ __('posts') }}
-                                                        · {{ $fol }} {{ __('followers') }}
-                                                        · {{ $ing }} {{ __('following') }}
-                                                    @elseif ($ph === 'facebook')
-                                                        @php
-                                                            $folCount = (int) $acc->followers_count;
-                                                            $ingCount = (int) $acc->following_count;
-                                                            $posCount = (int) $acc->posts_count;
-                                                        @endphp
+                                                        @if ($posCount > 0) · {{ number_format($posCount) }} {{ __('posts') }} @endif
                                                         · {{ number_format($folCount) }} {{ __('followers') }}
-                                                        @if ($ingCount > 0)
-                                                            · {{ number_format($ingCount) }} {{ __('following') }}
-                                                        @endif
-                                                        @if ($posCount > 0)
-                                                            · {{ number_format($posCount) }} {{ __('posts') }}
-                                                        @endif
+                                                        @if ($ingCount > 0) · {{ number_format($ingCount) }} {{ __('following') }} @endif
+                                                    @elseif ($ph === 'facebook')
+                                                        · {{ number_format($folCount) }} {{ __('followers') }}
+                                                        @if ($ingCount > 0) · {{ number_format($ingCount) }} {{ __('following') }} @endif
+                                                        @if ($posCount > 0) · {{ number_format($posCount) }} {{ __('posts') }} @endif
                                                     @else
-                                                        · {{ $fol }} {{ __('followers') }}
+                                                        · {{ number_format($folCount) }} {{ __('followers') }}
+                                                        @if ($posCount > 0) · {{ number_format($posCount) }} {{ __('posts') }} @endif
                                                     @endif
                                                 </p>
                                                 @if ($acc->token_expires_at
@@ -127,30 +128,48 @@
                                                     <p class="text-xs text-red-600 mt-1">{{ __('Token expired. Reconnect required.') }}</p>
                                                 @endif
                                             </div>
-                                            <div class="flex items-center gap-2 shrink-0">
-                                                @if ($platform->slug === 'facebook' && $acc->platform_page_id)
-                                                    <form method="POST" action="{{ route('accounts.refresh-stats', $acc) }}">
-                                                        @csrf
-                                                        <button
-                                                            type="submit"
-                                                            title="{{ __('Refresh follower/following counts') }}"
-                                                            class="p-1.5 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                                                        >
-                                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-                                                            </svg>
-                                                        </button>
-                                                    </form>
-                                                @endif
-                                                <form
-                                                    method="post"
-                                                    action="{{ route('accounts.connections.destroy', $acc) }}"
+
+                                            {{-- Right: action buttons --}}
+                                            <div class="flex items-center gap-1.5 shrink-0">
+
+                                                {{-- Refresh Stats (all platforms) --}}
+                                                <form method="POST" action="{{ route('accounts.connections.refresh-stats', $acc) }}" class="inline">
+                                                    @csrf
+                                                    <button type="submit"
+                                                        title="{{ __('Refresh stats') }}"
+                                                        class="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                                    >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                                                        </svg>
+                                                    </button>
+                                                </form>
+
+                                                {{-- Active / Inactive toggle --}}
+                                                <form method="POST" action="{{ route('accounts.connections.toggle-active', $acc) }}" class="inline">
+                                                    @csrf
+                                                    @method('PATCH')
+                                                    <button
+                                                        type="submit"
+                                                        title="{{ $isActive ? __('Pause publishing to this account') : __('Resume publishing to this account') }}"
+                                                        class="relative inline-flex items-center w-9 h-5 rounded-full transition-colors focus:outline-none {{ $isActive ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-gray-300 hover:bg-gray-400' }}"
+                                                    >
+                                                        <span class="sr-only">{{ $isActive ? __('Pause') : __('Resume') }}</span>
+                                                        <span class="inline-block w-3.5 h-3.5 bg-white rounded-full shadow transform transition-transform {{ $isActive ? 'translate-x-4' : 'translate-x-0.5' }}"></span>
+                                                    </button>
+                                                </form>
+
+                                                {{-- Disconnect --}}
+                                                <form method="POST"
+                                                      action="{{ route('accounts.connections.destroy', $acc) }}"
+                                                      class="inline"
+                                                      onsubmit="return confirm('{{ __('Disconnect :name? This cannot be undone.', ['name' => addslashes($acc->account_name ?? $platform->name)]) }}')"
                                                 >
                                                     @csrf
                                                     @method('DELETE')
                                                     <button
                                                         type="submit"
-                                                        class="border border-red-300 text-red-600 hover:bg-red-50 text-xs font-semibold px-4 py-2 rounded-xl active:scale-95 transition-all disabled:opacity-60"
+                                                        class="border border-red-300 text-red-600 hover:bg-red-50 text-xs font-semibold px-3 py-1.5 rounded-xl active:scale-95 transition-all"
                                                     >
                                                         {{ __('Disconnect') }}
                                                     </button>

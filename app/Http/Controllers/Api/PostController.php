@@ -205,9 +205,11 @@ class PostController extends Controller
                 ->where('is_connected', true)
                 ->first();
             if (! $account) {
-                $messages['platform_slugs'] = [__('No connected :platform account. Add or connect the account in Accounts (Settings) first.', ['platform' => $platform->name])];
+                $messages['platform_slugs'] = [__('No connected :platform account. Connect the account in Accounts first.', ['platform' => $platform->name])];
                 throw ValidationException::withMessages($messages);
             }
+            // is_active is intentionally NOT checked here.
+            // Paused accounts are filtered silently in createPostTargets().
         }
     }
 
@@ -219,17 +221,17 @@ class PostController extends Controller
         foreach ($slugs as $slug) {
             $platform = SocialPlatform::query()->where('slug', $slug)->firstOrFail();
             
-            // Get all connected accounts for this platform in this workspace
+            // Only active+connected accounts receive post targets.
+            // Silently skip platforms where all accounts are paused.
             $accounts = SocialAccount::query()
                 ->where('workspace_id', $workspace->id)
                 ->where('social_platform_id', $platform->id)
                 ->where('is_connected', true)
+                ->where('is_active', true)
                 ->get();
 
             if ($accounts->isEmpty()) {
-                throw ValidationException::withMessages([
-                    'platform_slugs' => [__('No connected :platform account. Add or connect the account in Accounts (Settings) first.', ['platform' => $platform->name])],
-                ]);
+                continue;
             }
 
             foreach ($accounts as $account) {

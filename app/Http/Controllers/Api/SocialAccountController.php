@@ -111,7 +111,13 @@ class SocialAccountController extends Controller
                 $account = $accounts->get($platform->id);
                 $status = 'disconnected';
                 if ($account?->is_connected) {
-                    $status = ($account->token_expires_at && $account->token_expires_at->isPast()) ? 'expired' : 'connected';
+                    if ($account->token_expires_at && $account->token_expires_at->isPast()) {
+                        $status = 'expired';
+                    } elseif (! $account->is_active) {
+                        $status = 'paused';
+                    } else {
+                        $status = 'connected';
+                    }
                 }
 
                 return [
@@ -127,6 +133,7 @@ class SocialAccountController extends Controller
                     'account_id' => $account?->id,
                     'account_name' => $account?->account_name,
                     'account_handle' => $account?->account_handle,
+                    'is_active' => (bool) ($account?->is_active ?? true),
                     'followers_count' => (int) ($account?->followers_count ?? 0),
                     'fan_count' => (int) ($account?->fan_count ?? 0),
                     'following_count' => (int) ($account?->following_count ?? 0),
@@ -376,6 +383,7 @@ class SocialAccountController extends Controller
             'status' => $status,
             'token_expires_at' => $account->token_expires_at?->toIso8601String(),
             'account_handle' => $account->account_handle,
+            'is_active'      => (bool) $account->is_active,
             'followers_count' => (int) $account->followers_count,
             'fan_count' => (int) $account->fan_count,
             'following_count' => (int) $account->following_count,

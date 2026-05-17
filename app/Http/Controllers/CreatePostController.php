@@ -34,26 +34,34 @@ class CreatePostController extends Controller
         }
 
         $allowed = ['facebook', 'instagram', 'linkedin', 'twitter'];
-        $connectedSlugs = SocialAccount::query()
+        $accounts = SocialAccount::query()
             ->where('workspace_id', $workspace->id)
             ->where('is_connected', true)
             ->whereHas('platform', fn ($q) => $q->whereIn('slug', $allowed))
             ->with('platform')
             ->get()
-            ->filter(function (SocialAccount $account) {
-                if ($account->token_expires_at && $account->token_expires_at->isPast()) {
-                    return false;
-                }
+            ->filter(fn (SocialAccount $account) => ! ($account->token_expires_at && $account->token_expires_at->isPast())
+                && in_array($account->platform?->slug, $allowed, true));
 
-                return in_array($account->platform?->slug, ['facebook', 'instagram', 'linkedin', 'twitter'], true);
-            })
-            ->map(fn (SocialAccount $account) => (string) $account->platform?->slug)
+        // Active accounts — fully usable for publishing
+        $connectedSlugs = $accounts
+            ->filter(fn (SocialAccount $a) => (bool) $a->is_active)
+            ->map(fn (SocialAccount $a) => (string) $a->platform?->slug)
+            ->unique()
+            ->values();
+
+        // Paused accounts — connected but is_active=false; shown greyed in UI
+        $pausedSlugs = $accounts
+            ->filter(fn (SocialAccount $a) => ! $a->is_active)
+            ->map(fn (SocialAccount $a) => (string) $a->platform?->slug)
+            ->diff($connectedSlugs)  // exclude if any active account exists for same platform
             ->unique()
             ->values();
 
         return view('posts.create', [
             'workspace' => $workspace,
             'connectedSlugs' => $connectedSlugs,
+            'pausedSlugs' => $pausedSlugs,
         ]);
     }
 }

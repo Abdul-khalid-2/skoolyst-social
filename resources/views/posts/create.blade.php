@@ -19,6 +19,7 @@
     $alpine = [
         'postUrl' => $workspace ? url("/api/workspaces/{$workspace->id}/posts") : '',
         'connectedSlugs' => $connectedSlugs->all(),
+        'pausedSlugs' => ($pausedSlugs ?? collect())->all(),
         'workspaceName' => $workspace?->name ?? '',
     ];
 @endphp
@@ -48,6 +49,7 @@
                 minDateTime: '',
                 errors: { caption: null, platforms: null, platform_slugs: null, schedule: null, media: null, server: null },
                 connectedList: [],
+                pausedList: [],
 
                 get charCount() { return (this.caption || '').length; },
                 get maxChars() { return 2200; },
@@ -78,12 +80,14 @@
 
                 init() {
                     this.connectedList = [...(config.connectedSlugs || [])];
+                    this.pausedList    = [...(config.pausedSlugs || [])];
                     this.selectedPlatforms = [...(config.connectedSlugs || [])];
                 },
 
                 initMinDate() { this.minDateTime = new Date().toISOString().slice(0, 16); },
 
                 canUse(id) { return this.connectedList.includes(id); },
+                isPaused(id) { return this.pausedList.includes(id); },
                 isSelected(id) { return this.selectedPlatforms.includes(id); },
                 btnPlatformClass(p) {
                     const selected = this.isSelected(p.id);
@@ -95,9 +99,15 @@
                 },
 
                 togglePlatform(id) {
+                    if (this.pausedList.includes(id)) {
+                        window.dispatchEvent(
+                            new CustomEvent('toast', { detail: { type: 'info', message: 'This account is paused. Enable it in Accounts to publish.' } }),
+                        );
+                        return;
+                    }
                     if (! this.connectedList.includes(id)) {
                         window.dispatchEvent(
-                            new CustomEvent('toast', { detail: { type: 'info', message: 'Connect this platform in Accounts first, or it is not available for this workspace.' } }),
+                            new CustomEvent('toast', { detail: { type: 'info', message: 'Connect this platform in Accounts first.' } }),
                         );
                         return;
                     }
@@ -430,16 +440,19 @@
                                     @click="togglePlatform('{{ $p->id }}')"
                                     class="relative border-2 rounded-xl p-4 text-left transition-all"
                                     :class="btnPlatformClass(@js($p))"
+                                    :aria-disabled="isPaused('{{ $p->id }}') || ! canUse('{{ $p->id }}')"
                                 >
                                     <div class="flex items-center gap-3">
                                         <div
                                             class="w-10 h-10 rounded-xl text-white text-sm font-semibold flex items-center justify-center"
-                                            :class="canUse('{{ $p->id }}') ? '{{ $p->gradientClass }}' : 'bg-gray-300'"
+                                            :class="canUse('{{ $p->id }}') ? '{{ $p->gradientClass }}' : (isPaused('{{ $p->id }}') ? 'bg-amber-400' : 'bg-gray-300')"
                                         >
                                             <span>{{ $p->letter }}</span>
                                         </div>
                                         <span class="text-sm font-semibold text-gray-800">
-                                            {{ $p->name }}<span x-show="! canUse('{{ $p->id }}')" class="ml-1 text-[10px] text-gray-400">(not connected)</span>
+                                            {{ $p->name }}
+                                            <span x-show="isPaused('{{ $p->id }}')" class="ml-1 text-[10px] text-amber-600">(paused)</span>
+                                            <span x-show="! canUse('{{ $p->id }}') && ! isPaused('{{ $p->id }}')" class="ml-1 text-[10px] text-gray-400">(not connected)</span>
                                         </span>
                                     </div>
                                     <span

@@ -8,6 +8,7 @@ use App\Models\PublishJob;
 use App\Models\PublishLog;
 use App\Models\SocialAccount;
 use App\Models\PostTarget;
+use App\Traits\ResolvesMediaPath;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
@@ -15,6 +16,7 @@ use Throwable;
 
 class InstagramPostService
 {
+    use ResolvesMediaPath;
     /**
      * Publish a Post to Instagram using a connected Business/Creator account (Graph API).
      *
@@ -263,7 +265,7 @@ class InstagramPostService
      */
     private function prepareMediaForInstagram(string $mediaUrl, string $kind, PublishJob $job): ?string
     {
-        $localPath = $this->localPathForMediaUrl($mediaUrl);
+        $localPath = $this->resolveMediaPath($mediaUrl);
 
         $candidateUrl = null;
         if (str_starts_with($mediaUrl, 'http://') || str_starts_with($mediaUrl, 'https://')) {
@@ -306,33 +308,6 @@ class InstagramPostService
             ]);
 
             return $mirroredUrl;
-        }
-
-        return null;
-    }
-
-    private function localPathForMediaUrl(string $mediaUrl): ?string
-    {
-        if ($mediaUrl === '') {
-            return null;
-        }
-        $candidates = [];
-
-        if (str_starts_with($mediaUrl, 'http://') || str_starts_with($mediaUrl, 'https://')) {
-            $path = parse_url($mediaUrl, PHP_URL_PATH);
-            if (is_string($path) && str_contains($path, '/storage/')) {
-                $relative = ltrim(substr($path, strpos($path, '/storage/') + strlen('/storage/')), '/');
-                $candidates[] = storage_path('app/public/'.str_replace('/', DIRECTORY_SEPARATOR, $relative));
-            }
-        } else {
-            $candidates[] = str_replace(url('/storage'), storage_path('app/public'), $mediaUrl);
-            $candidates[] = str_replace(URL::to('/storage'), storage_path('app/public'), $mediaUrl);
-        }
-
-        foreach ($candidates as $path) {
-            if (is_string($path) && is_file($path)) {
-                return $path;
-            }
         }
 
         return null;
