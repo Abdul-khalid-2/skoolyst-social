@@ -186,22 +186,27 @@ class PostController extends Controller
         }
 
         if ($request->hasFile('media')) {
-            $file = $request->file('media');
-            $dir  = 'workspaces/'.$workspace->id.'/posts/'.$post->id;
-            $ext  = $file->getClientOriginalExtension() !== ''
-                        ? $file->getClientOriginalExtension()
-                        : (str_starts_with($file->getMimeType() ?? '', 'video/') ? 'mp4' : 'bin');
-            $name = (string) Str::uuid().'.'.$ext;
-            $path = $file->storeAs($dir, $name, 'public');
-            $mime = $file->getMimeType() ?? 'application/octet-stream';
+            $file          = $request->file('media');
+            $ext           = $file->getClientOriginalExtension() ?: 'bin';
+            $name          = (string) Str::uuid().'.'.$ext;
+            $workspaceSlug = $workspace->slug ?? ('ws-'.$workspace->id);
+            $dest          = public_path('media/'.$workspaceSlug);
+
+            if (! is_dir($dest)) {
+                mkdir($dest, 0775, true);
+            }
+
+            $file->move($dest, $name);
+            $mime = $file->getClientMimeType() ?? 'application/octet-stream';
             $type = $this->mapMediaType($mime, (string) $file->getClientOriginalName());
+            $url  = url('media/'.$workspaceSlug.'/'.$name);
 
             PostMedia::query()->create([
                 'post_id'        => $post->id,
                 'media_asset_id' => null,
-                'url'            => URL::to(Storage::disk('public')->url($path)),
+                'url'            => $url,
                 'type'           => $type,
-                'size'           => $file->getSize() ?: 0,
+                'size'           => filesize($dest.'/'.$name) ?: 0,
                 'mime_type'      => $mime,
                 'sort_order'     => 0,
             ]);
