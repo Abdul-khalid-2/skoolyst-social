@@ -62,6 +62,13 @@ class PostController extends Controller
         $rawList = is_array($raw) ? $raw : ($raw !== null && $raw !== '' ? [$raw] : []);
         $slugs = array_values(array_unique(array_filter($rawList, fn ($s) => is_string($s) && $s !== '')));
 
+        $rawIds = $request->input('social_account_ids', []);
+        $rawIdsList = is_array($rawIds) ? $rawIds : ($rawIds !== null && $rawIds !== '' ? [$rawIds] : []);
+        $accountIds = array_values(array_unique(array_map(
+            'intval',
+            array_filter($rawIdsList, fn ($v) => is_numeric($v))
+        )));
+
         $status = match ($mode) {
             'draft' => 'draft',
             'schedule' => 'scheduled',
@@ -76,7 +83,7 @@ class PostController extends Controller
 
         $tz = (string) ($request->user()?->timezone ?? 'UTC');
 
-        $post = DB::transaction(function () use ($request, $workspace, $slugs, $status, $scheduledAt, $tz) {
+        $post = DB::transaction(function () use ($request, $workspace, $slugs, $accountIds, $status, $scheduledAt, $tz) {
             $post = Post::query()->create([
                 'workspace_id' => $workspace->id,
                 'user_id' => $request->user()->id,
@@ -110,7 +117,9 @@ class PostController extends Controller
                 ]);
             }
 
-            if (count($slugs) > 0) {
+            if (count($accountIds) > 0) {
+                $this->createPostTargetsForAccounts($post, $workspace, $accountIds);
+            } elseif (count($slugs) > 0) {
                 $this->assertSocialAccounts($workspace, $slugs);
                 $this->createPostTargets($post, $workspace, $slugs);
             }
@@ -118,7 +127,8 @@ class PostController extends Controller
             return $post;
         });
 
-        if ($mode === 'now' && count($slugs) > 0) {
+        $hasTargets = $post->postTargets()->exists();
+        if ($mode === 'now' && $hasTargets) {
             $this->publishPostTargets($post);
         }
 
@@ -132,12 +142,26 @@ class PostController extends Controller
         $this->assertPostInWorkspace($workspace, $post);
         $this->authorize('update', $post);
 
+        // Normalize social_account_ids[] before validation. The Alpine frontend signals
+        // "clear all targets" by sending an empty string when the selection is empty
+        // (FormData has no native empty-array). Coerce all shapes into an array.
+        if ($request->has('social_account_ids')) {
+            $rawIds = $request->input('social_account_ids');
+            if ($rawIds === '' || $rawIds === null) {
+                $request->merge(['social_account_ids' => []]);
+            } elseif (! is_array($rawIds)) {
+                $request->merge(['social_account_ids' => [$rawIds]]);
+            }
+        }
+
         $validated = $request->validate([
-            'caption'      => ['sometimes', 'string', 'min:1', 'max:2200'],
-            'action'       => ['sometimes', 'string', Rule::in(['draft', 'publish_now', 'reschedule'])],
-            'scheduled_at' => ['nullable', 'date', 'after:now'],
-            'remove_media' => ['sometimes', 'boolean'],
-            'media'        => ['sometimes', 'nullable', 'file', 'mimes:jpeg,jpg,png,gif,webp,mp4', 'max:51200'],
+            'caption'              => ['sometimes', 'string', 'min:1', 'max:2200'],
+            'action'               => ['sometimes', 'string', Rule::in(['draft', 'publish_now', 'reschedule'])],
+            'scheduled_at'         => ['nullable', 'date', 'after:now'],
+            'remove_media'         => ['sometimes', 'boolean'],
+            'media'                => ['sometimes', 'nullable', 'file', 'mimes:jpeg,jpg,png,gif,webp,mp4', 'max:51200'],
+            'social_account_ids'   => ['sometimes', 'array'],
+            'social_account_ids.*' => ['integer', 'min:1'],
         ]);
 
         if (($validated['action'] ?? null) === 'reschedule' && empty($validated['scheduled_at'])) {
@@ -156,16 +180,43 @@ class PostController extends Controller
             $post->caption = (string) $validated['caption'];
         }
 
+        // Sync per-account targeting only when the caller explicitly provided it.
+        // (Avoids accidentally wiping targets on caption/media-only edits.)
+        $accountIdsProvided = $request->has('social_account_ids');
+        if ($accountIdsProvided) {
+            $accountIds = array_values(array_unique(array_map(
+                'intval',
+                array_filter($validated['social_account_ids'] ?? [], fn ($v) => is_numeric($v))
+            )));
+            $this->syncPostTargets($post, $workspace, $accountIds);
+        }
+
         $action = (string) ($validated['action'] ?? '');
         if ($action === 'draft') {
             $post->status = 'draft';
             $post->scheduled_at = null;
         } elseif ($action === 'publish_now') {
             $this->authorize('publish', $post);
+
+            // Guard: publishing requires at least one active target. The scheduler/publisher
+            // iterates post_targets, so a target-less publish would silently no-op.
+            if (! $post->postTargets()->exists()) {
+                throw ValidationException::withMessages([
+                    'social_account_ids' => [__('Please select at least one account or page to post to.')],
+                ]);
+            }
+
             $post->status = 'publishing';
             $post->scheduled_at = null;
         } elseif ($action === 'reschedule') {
             $this->authorize('schedule', $post);
+
+            if (! $post->postTargets()->exists()) {
+                throw ValidationException::withMessages([
+                    'social_account_ids' => [__('Please select at least one account or page to post to.')],
+                ]);
+            }
+
             $post->status = 'scheduled';
             $post->scheduled_at = Carbon::parse((string) $validated['scheduled_at']);
         }
@@ -210,6 +261,12 @@ class PostController extends Controller
                 'mime_type'      => $mime,
                 'sort_order'     => 0,
             ]);
+        }
+
+        // Fire the actual publish for publish_now (previously this only flipped the status,
+        // leaving the post stuck in 'publishing').
+        if ($action === 'publish_now') {
+            $this->publishPostTargets($post);
         }
 
         $post->load(['author', 'postMedia', 'postTargets.socialPlatform', 'postTargets.socialAccount']);
@@ -285,6 +342,81 @@ class PostController extends Controller
                     'status' => 'pending',
                 ]);
             }
+        }
+    }
+
+    /**
+     * Sync per-account targeting on an existing post to match the supplied set of account ids.
+     * Adds missing targets and removes targets for accounts no longer selected. Targets that
+     * already exist with a non-pending status (e.g. previously published in a partial post)
+     * are left untouched to preserve history.
+     *
+     * @param  array<int, int>  $accountIds
+     */
+    private function syncPostTargets(Post $post, Workspace $workspace, array $accountIds): void
+    {
+        $validAccounts = SocialAccount::query()
+            ->where('workspace_id', $workspace->id)
+            ->whereIn('id', $accountIds)
+            ->where('is_connected', true)
+            ->where('is_active', true)
+            ->get()
+            ->keyBy('id');
+
+        $desiredIds = $validAccounts->keys()->all();
+
+        $existingTargets = $post->postTargets()->get()->keyBy('social_account_id');
+
+        // Remove targets for accounts no longer selected, but only when they have not
+        // already been published (preserves the activity/audit log of partial publishes).
+        foreach ($existingTargets as $accountId => $target) {
+            if (! in_array($accountId, $desiredIds, true) && in_array($target->status, ['pending'], true)) {
+                $target->delete();
+            }
+        }
+
+        // Add new targets for newly-selected accounts.
+        foreach ($desiredIds as $accountId) {
+            if ($existingTargets->has($accountId)) {
+                continue;
+            }
+            $account = $validAccounts->get($accountId);
+            PostTarget::query()->create([
+                'post_id' => $post->id,
+                'social_account_id' => $account->id,
+                'social_platform_id' => $account->social_platform_id,
+                'status' => 'pending',
+            ]);
+        }
+    }
+
+    /**
+     * Create post targets from an explicit set of social account ids (per-account/per-page
+     * targeting). Accounts that no longer belong to the workspace, are disconnected, or are
+     * inactive are silently skipped so the caller does not have to re-validate.
+     *
+     * @param  array<int, int>  $accountIds
+     */
+    private function createPostTargetsForAccounts(Post $post, Workspace $workspace, array $accountIds): void
+    {
+        if (count($accountIds) === 0) {
+            return;
+        }
+
+        $accounts = SocialAccount::query()
+            ->where('workspace_id', $workspace->id)
+            ->whereIn('id', $accountIds)
+            ->where('is_connected', true)
+            ->where('is_active', true)
+            ->get();
+
+        foreach ($accounts as $account) {
+            PostTarget::query()->create([
+                'post_id' => $post->id,
+                'social_account_id' => $account->id,
+                'social_platform_id' => $account->social_platform_id,
+                'status' => 'pending',
+            ]);
         }
     }
 
@@ -504,6 +636,7 @@ class PostController extends Controller
                 'platform' => $t->socialPlatform?->slug,
                 'status' => $t->status,
                 'social_account_id' => $t->social_account_id,
+                'account_name' => $t->socialAccount?->account_name,
                 'platform_post_id' => $t->platform_post_id,
                 'error_message' => $t->error_message,
             ])->values()->all(),

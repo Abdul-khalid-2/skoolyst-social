@@ -22,6 +22,8 @@ class CreatePostController extends Controller
             return view('posts.create', [
                 'workspace' => null,
                 'connectedSlugs' => collect(),
+                'pausedSlugs' => collect(),
+                'accountsByPlatform' => [],
             ]);
         }
 
@@ -30,6 +32,8 @@ class CreatePostController extends Controller
             return view('posts.create', [
                 'workspace' => null,
                 'connectedSlugs' => collect(),
+                'pausedSlugs' => collect(),
+                'accountsByPlatform' => [],
             ]);
         }
 
@@ -60,10 +64,32 @@ class CreatePostController extends Controller
          ->unique()
          ->values();
 
+        // Per-account/per-page targeting data: shape every connected account into a flat
+        // structure the Alpine UI can use to render the targeting modal. Twitter rows are
+        // included for visibility but excluded from active publishing (not implemented in
+        // the publisher) — they show as "not supported" in the modal.
+        $accountsByPlatform = $accounts
+            ->groupBy(fn (SocialAccount $a) => (string) $a->platform?->slug)
+            ->map(fn ($group) => $group
+                ->map(fn (SocialAccount $a) => [
+                    'id'           => (int) $a->id,
+                    'platform'     => (string) $a->platform?->slug,
+                    'account_name' => (string) ($a->account_name ?: $a->account_handle ?: ('Account #'.$a->id)),
+                    'account_handle' => (string) ($a->account_handle ?? ''),
+                    'page_id'      => $a->platform_page_id ? (string) $a->platform_page_id : null,
+                    'avatar'       => $a->avatar,
+                    'is_active'    => (bool) $a->is_active,
+                ])
+                ->values()
+                ->all()
+            )
+            ->all();
+
         return view('posts.create', [
             'workspace' => $workspace,
             'connectedSlugs' => $connectedSlugs,
             'pausedSlugs' => $pausedSlugs,
+            'accountsByPlatform' => $accountsByPlatform,
         ]);
     }
 }

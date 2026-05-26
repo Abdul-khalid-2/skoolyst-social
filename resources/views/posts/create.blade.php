@@ -11,15 +11,16 @@
         'Looking for a school that fits your child? Skoolyst lets you compare schools side by side and read real parent reviews. Find the perfect match today!',
     ];
     $platforms = [
-        (object) ['id' => 'facebook', 'name' => 'Facebook', 'letter' => 'f', 'gradientClass' => 'bg-gradient-to-br from-blue-600 to-blue-700', 'borderColor' => 'border-blue-500', 'textColor' => 'text-blue-600', 'pillColor' => 'bg-blue-600'],
-        (object) ['id' => 'instagram', 'name' => 'Instagram', 'letter' => 'Ig', 'gradientClass' => 'bg-gradient-to-br from-purple-500 to-pink-500', 'borderColor' => 'border-pink-400', 'textColor' => 'text-pink-600', 'pillColor' => 'bg-pink-500'],
-        (object) ['id' => 'linkedin', 'name' => 'LinkedIn', 'letter' => 'in', 'gradientClass' => 'bg-gradient-to-br from-indigo-600 to-indigo-700', 'borderColor' => 'border-indigo-500', 'textColor' => 'text-indigo-600', 'pillColor' => 'bg-indigo-600'],
-        (object) ['id' => 'twitter', 'name' => 'X (Twitter)', 'letter' => 'X', 'gradientClass' => 'bg-gradient-to-br from-gray-800 to-gray-900', 'borderColor' => 'border-gray-700', 'textColor' => 'text-gray-900', 'pillColor' => 'bg-gray-800'],
+        (object) ['id' => 'facebook',  'name' => 'Facebook',    'letter' => 'f',  'gradientClass' => 'bg-gradient-to-br from-blue-600 to-blue-700',    'borderColor' => 'border-blue-500',   'textColor' => 'text-blue-600',   'pillColor' => 'bg-blue-600'],
+        (object) ['id' => 'instagram', 'name' => 'Instagram',   'letter' => 'Ig', 'gradientClass' => 'bg-gradient-to-br from-purple-500 to-pink-500',  'borderColor' => 'border-pink-400',   'textColor' => 'text-pink-600',   'pillColor' => 'bg-pink-500'],
+        (object) ['id' => 'linkedin',  'name' => 'LinkedIn',    'letter' => 'in', 'gradientClass' => 'bg-gradient-to-br from-indigo-600 to-indigo-700', 'borderColor' => 'border-indigo-500', 'textColor' => 'text-indigo-600', 'pillColor' => 'bg-indigo-600'],
+        (object) ['id' => 'twitter',   'name' => 'X (Twitter)', 'letter' => 'X',  'gradientClass' => 'bg-gradient-to-br from-gray-800 to-gray-900',    'borderColor' => 'border-gray-700',   'textColor' => 'text-gray-900',   'pillColor' => 'bg-gray-800'],
     ];
     $alpine = [
         'postUrl' => $workspace ? url("/api/workspaces/{$workspace->id}/posts") : '',
         'connectedSlugs' => $connectedSlugs->all(),
         'pausedSlugs' => ($pausedSlugs ?? collect())->all(),
+        'accountsByPlatform' => $accountsByPlatform ?? [],
         'workspaceName' => $workspace?->name ?? '',
     ];
 @endphp
@@ -41,15 +42,25 @@
                 mediaPreview: '',
                 mediaName: '',
                 mediaFile: null,
-                selectedPlatforms: [],
                 scheduleMode: 'now',
                 scheduledAt: '',
                 submitting: false,
                 saveDraftLoading: false,
                 minDateTime: '',
-                errors: { caption: null, platforms: null, platform_slugs: null, schedule: null, media: null, server: null },
+                errors: { caption: null, targeting: null, schedule: null, media: null, server: null },
                 connectedList: [],
                 pausedList: [],
+
+                // Per-account/per-page targeting state:
+                //   accountsByPlatform = { facebook: [ {id, account_name, ...}, ... ], ... }
+                //   selectedAccountIds = ids of accounts that will receive the post when published.
+                accountsByPlatform: {},
+                selectedAccountIds: [],
+
+                // Modal state.
+                modalOpen: false,
+                modalPlatform: '',          // e.g. 'facebook'
+                modalDraftIds: [],          // staged ids while the modal is open
 
                 get charCount() { return (this.caption || '').length; },
                 get maxChars() { return 2200; },
@@ -63,62 +74,200 @@
                 get isVideo() {
                     return this.mediaFile && this.mediaFile.type && this.mediaFile.type.startsWith('video/');
                 },
-                get twitterSelected() { return this.selectedPlatforms.includes('twitter'); },
+                get twitterSelected() {
+                    return this.accountsFor('twitter').some((a) => this.selectedAccountIds.includes(a.id));
+                },
                 get charLabel() {
                     if (this.twitterSelected) { return this.charCount + ' / 280'; }
                     return this.charCount + '/2200';
                 },
+                get selectedPlatformSlugs() {
+                    const slugs = new Set();
+                    for (const slug of Object.keys(this.accountsByPlatform || {})) {
+                        if ((this.accountsByPlatform[slug] || []).some((a) => this.selectedAccountIds.includes(a.id))) {
+                            slugs.add(slug);
+                        }
+                    }
+                    return [...slugs];
+                },
                 get activeNames() {
-                    return this.selectedPlatforms
+                    return this.selectedPlatformSlugs
                         .map((id) => this.platformList.find((p) => p.id === id))
                         .filter(Boolean)
-                        .map((p) => ({
-                            name: p.name,
-                            pill: this.connectedList.includes(p.id) ? p.pillColor : 'bg-gray-400',
-                        }));
+                        .map((p) => ({ name: p.name, pill: p.pillColor }));
                 },
+                get hasAnyTarget() { return this.selectedAccountIds.length > 0; },
 
                 init() {
                     this.connectedList = [...(config.connectedSlugs || [])];
                     this.pausedList    = [...(config.pausedSlugs || [])];
-                    this.selectedPlatforms = [...(config.connectedSlugs || [])];
+                    this.accountsByPlatform = config.accountsByPlatform || {};
+
+                    // Default state: every connected + active account is opted in.
+                    // (Paused accounts on the Accounts page are excluded since the backend
+                    // would reject them at publish time anyway.)
+                    const defaults = [];
+                    for (const slug of Object.keys(this.accountsByPlatform)) {
+                        for (const a of this.accountsByPlatform[slug] || []) {
+                            if (a.is_active) {
+                                defaults.push(a.id);
+                            }
+                        }
+                    }
+                    this.selectedAccountIds = defaults;
                 },
 
                 initMinDate() { this.minDateTime = new Date().toISOString().slice(0, 16); },
 
-                canUse(id) { return this.connectedList.includes(id); },
-                isPaused(id) { return this.pausedList.includes(id); },
-                isSelected(id) { return this.selectedPlatforms.includes(id); },
-                btnPlatformClass(p) {
-                    const selected = this.isSelected(p.id);
-                    const can = this.canUse(p.id);
-                    if (selected) {
-                        return (can ? p.borderColor : 'border-gray-200') + ' ' + (can ? 'bg-gray-50' : 'bg-gray-100/80 opacity-70');
-                    }
-                    return 'border-gray-200 hover:border-gray-300';
+                // ---------- Targeting helpers ----------
+
+                accountsFor(slug) {
+                    return this.accountsByPlatform[slug] || [];
+                },
+                connectedCountFor(slug) {
+                    return this.accountsFor(slug).filter((a) => a.is_active).length;
+                },
+                activeCountFor(slug) {
+                    return this.accountsFor(slug)
+                        .filter((a) => a.is_active && this.selectedAccountIds.includes(a.id))
+                        .length;
+                },
+                hasMultipleAccounts(slug) {
+                    return this.connectedCountFor(slug) > 1;
                 },
 
-                togglePlatform(id) {
-                    if (this.pausedList.includes(id)) {
-                        window.dispatchEvent(
-                            new CustomEvent('toast', { detail: { type: 'info', message: 'This account is paused. Enable it in Accounts to publish.' } }),
-                        );
-                        return;
-                    }
-                    if (! this.connectedList.includes(id)) {
-                        window.dispatchEvent(
-                            new CustomEvent('toast', { detail: { type: 'info', message: 'Connect this platform in Accounts first.' } }),
-                        );
-                        return;
-                    }
-                    if (this.selectedPlatforms.includes(id)) {
-                        this.selectedPlatforms = this.selectedPlatforms.filter((x) => x !== id);
-                    } else {
-                        this.selectedPlatforms = [...this.selectedPlatforms, id];
-                    }
-                    this.errors.platforms = null;
-                    this.errors.platform_slugs = null;
+                /**
+                 * Visual state for a platform chip:
+                 *   'disabled' — platform has no connected accounts (or only paused ones)
+                 *   'all'      — every connected account is selected
+                 *   'partial'  — some accounts selected
+                 *   'none'     — connected accounts exist but none selected
+                 */
+                chipState(slug) {
+                    const connected = this.connectedCountFor(slug);
+                    if (connected === 0) { return 'disabled'; }
+                    const active = this.activeCountFor(slug);
+                    if (active === connected) { return 'all'; }
+                    if (active === 0) { return 'none'; }
+                    return 'partial';
                 },
+
+                chipBadgeText(slug) {
+                    const connected = this.connectedCountFor(slug);
+                    if (connected === 0) {
+                        if ((this.pausedList || []).includes(slug)) { return 'Paused'; }
+                        return 'Not connected';
+                    }
+                    if (this.hasMultipleAccounts(slug)) {
+                        return this.activeCountFor(slug) + '/' + connected + ' pages';
+                    }
+                    const state = this.chipState(slug);
+                    if (state === 'all') { return 'Active'; }
+                    return 'Inactive';
+                },
+
+                chipClass(slug) {
+                    const state = this.chipState(slug);
+                    if (state === 'disabled') {
+                        return 'border-gray-200 bg-gray-50 text-gray-400 opacity-75 cursor-not-allowed';
+                    }
+                    if (state === 'all') {
+                        return 'border-blue-500 bg-blue-50 text-blue-700 hover:bg-blue-100';
+                    }
+                    if (state === 'partial') {
+                        return 'border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100';
+                    }
+                    // 'none'
+                    return 'border-gray-300 bg-gray-100 text-gray-500 line-through hover:bg-gray-200';
+                },
+
+                // ---------- Modal ----------
+
+                openModal(slug) {
+                    if (this.chipState(slug) === 'disabled') {
+                        const msg = (this.pausedList || []).includes(slug)
+                            ? 'This account is paused. Enable it in Accounts to publish.'
+                            : 'Connect this platform in Accounts first.';
+                        window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'info', message: msg } }));
+                        return;
+                    }
+                    this.modalPlatform = slug;
+                    this.modalDraftIds = this.accountsFor(slug)
+                        .filter((a) => this.selectedAccountIds.includes(a.id))
+                        .map((a) => a.id);
+                    this.modalOpen = true;
+                },
+
+                closeModal() {
+                    this.modalOpen = false;
+                    this.modalPlatform = '';
+                    this.modalDraftIds = [];
+                },
+
+                applyModal() {
+                    if (! this.modalPlatform) { this.closeModal(); return; }
+                    const slug = this.modalPlatform;
+                    // Remove all current ids for this platform; replace with the staged ids.
+                    const platformIds = this.accountsFor(slug).map((a) => a.id);
+                    const others = this.selectedAccountIds.filter((id) => ! platformIds.includes(id));
+                    this.selectedAccountIds = [...others, ...this.modalDraftIds];
+                    this.errors.targeting = null;
+                    this.closeModal();
+                },
+
+                toggleModalAccount(id, account) {
+                    if (account && account.is_active === false) {
+                        window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'info', message: 'This account is paused. Enable it in Accounts to publish.' } }));
+                        return;
+                    }
+                    if (this.modalDraftIds.includes(id)) {
+                        this.modalDraftIds = this.modalDraftIds.filter((x) => x !== id);
+                    } else {
+                        this.modalDraftIds = [...this.modalDraftIds, id];
+                    }
+                },
+
+                isModalAccountOn(id) { return this.modalDraftIds.includes(id); },
+
+                /**
+                 * Modal master "post to all" toggle.
+                 * Returns 'on' | 'off' | 'indeterminate'.
+                 */
+                modalMasterState() {
+                    if (! this.modalPlatform) { return 'off'; }
+                    const usable = this.accountsFor(this.modalPlatform).filter((a) => a.is_active);
+                    if (usable.length === 0) { return 'off'; }
+                    const on = usable.filter((a) => this.modalDraftIds.includes(a.id)).length;
+                    if (on === 0) { return 'off'; }
+                    if (on === usable.length) { return 'on'; }
+                    return 'indeterminate';
+                },
+
+                toggleModalMaster() {
+                    if (! this.modalPlatform) { return; }
+                    const usable = this.accountsFor(this.modalPlatform).filter((a) => a.is_active);
+                    const usableIds = usable.map((a) => a.id);
+                    const state = this.modalMasterState();
+                    if (state === 'on') {
+                        // turn all off (just the ids for this platform)
+                        this.modalDraftIds = this.modalDraftIds.filter((id) => ! usableIds.includes(id));
+                    } else {
+                        // 'off' or 'indeterminate' -> turn all on
+                        const merged = new Set([...this.modalDraftIds, ...usableIds]);
+                        this.modalDraftIds = [...merged];
+                    }
+                },
+
+                modalPlatformLabel() {
+                    const p = this.platformList.find((pl) => pl.id === this.modalPlatform);
+                    return p ? p.name : '';
+                },
+                modalPlatformPillColor() {
+                    const p = this.platformList.find((pl) => pl.id === this.modalPlatform);
+                    return p ? p.pillColor : 'bg-gray-500';
+                },
+
+                // ---------- Media (unchanged) ----------
 
                 onFileChange(e) {
                     const file = e.target.files && e.target.files[0];
@@ -159,6 +308,8 @@
                     }
                 },
 
+                // ---------- AI helpers (unchanged) ----------
+
                 generateCaption() {
                     this.captionLoading = true;
                     setTimeout(() => {
@@ -180,8 +331,10 @@
                     }, 1200);
                 },
 
+                // ---------- Validation & submit ----------
+
                 validate(mode) {
-                    const next = { caption: null, platforms: null, platform_slugs: null, schedule: null, media: null };
+                    const next = { caption: null, targeting: null, schedule: null, media: null };
                     if (! (this.caption || '').trim()) {
                         next.caption = 'Caption is required.';
                     } else if (this.twitterSelected && this.charCount > 280) {
@@ -190,9 +343,8 @@
                         next.caption = 'Caption is too long (max 2200 characters).';
                     }
                     if (mode === 'now' || mode === 'schedule') {
-                        const ok = this.selectedPlatforms.filter((s) => this.connectedList.includes(s));
-                        if (ok.length === 0) {
-                            next.platforms = 'Select at least one platform with a connected account, or use Save as Draft only.';
+                        if (this.selectedAccountIds.length === 0) {
+                            next.targeting = 'Please select at least one account or page to post to.';
                         }
                     }
                     if (mode === 'schedule') {
@@ -206,7 +358,7 @@
                         }
                     }
                     this.errors = { ...this.errors, ...next };
-                    return ! (next.caption || next.platforms || next.platform_slugs || next.schedule);
+                    return ! (next.caption || next.targeting || next.schedule);
                 },
 
                 buildFormData(mode) {
@@ -214,11 +366,17 @@
                     form.append('mode', mode);
                     form.append('caption', this.caption);
                     form.append('ai_generated', this.aiGenerated ? '1' : '0');
-                    (this.selectedPlatforms || []).forEach((slug) => {
-                        if (this.connectedList.includes(slug)) {
-                            form.append('platform_slugs[]', slug);
-                        }
+
+                    (this.selectedAccountIds || []).forEach((id) => {
+                        form.append('social_account_ids[]', String(id));
                     });
+                    // Send platform_slugs[] derived from targeted accounts for any downstream
+                    // consumers that still inspect it (e.g. analytics). The backend prefers
+                    // social_account_ids[] when both are present.
+                    this.selectedPlatformSlugs.forEach((slug) => {
+                        form.append('platform_slugs[]', slug);
+                    });
+
                     if (mode === 'schedule' && this.scheduledAt) {
                         form.append('scheduled_at', new Date(this.scheduledAt).toISOString());
                     }
@@ -233,11 +391,8 @@
                 },
 
                 async runSubmit(mode) {
-                    this.errors = { caption: null, platforms: null, platform_slugs: null, schedule: null, media: null, server: null };
+                    this.errors = { caption: null, targeting: null, schedule: null, media: null, server: null };
                     const label = mode === 'draft' ? 'draft' : 'post';
-                    if (mode === 'draft' && this.connectedList.length === 0) {
-                        this.selectedPlatforms = [];
-                    }
                     if (! this.validate(mode)) { return; }
                     const config = this.config;
                     if (label === 'draft') { this.saveDraftLoading = true; } else { this.submitting = true; }
@@ -259,8 +414,10 @@
                             if (res.status === 422 && data.errors) {
                                 this.errors.caption = (data.errors.caption && data.errors.caption[0]) || this.errors.caption;
                                 this.errors.schedule = (data.errors.scheduled_at && data.errors.scheduled_at[0]) || this.errors.schedule;
-                                const ps = data.errors['platform_slugs'] || data.errors.platform_slugs;
-                                if (ps) { this.errors.platform_slugs = Array.isArray(ps) ? ps[0] : ps; this.errors.platforms = this.errors.platform_slugs; }
+                                const targetingErr = data.errors['social_account_ids'] || data.errors['platform_slugs'];
+                                if (targetingErr) {
+                                    this.errors.targeting = Array.isArray(targetingErr) ? targetingErr[0] : targetingErr;
+                                }
                                 this.errors.media = (data.errors.media && data.errors.media[0]) || this.errors.media;
                             }
                             const msg = data.message || 'Request failed.';
@@ -426,39 +583,60 @@
                         <input x-ref="fileInput" type="file" accept="image/*,video/*" class="hidden" @change="onFileChange" />
                     </div>
 
+                    {{-- Accounts & pages targeting --}}
                     <div class="bg-white rounded-xl border p-5 shadow-sm">
                         <div class="flex items-start justify-between mb-3">
-                            <label class="text-sm font-semibold text-gray-900">Platforms</label>
-                            <span class="text-xs text-gray-500">At least one for publish/schedule (when connected)</span>
+                            <div>
+                                <label class="text-sm font-semibold text-gray-900">Post to accounts &amp; pages</label>
+                                <p class="text-xs text-gray-500 mt-0.5">
+                                    All connected accounts are selected by default. Click an account to choose specific pages.
+                                </p>
+                            </div>
+                            <span class="text-xs text-gray-500 shrink-0 hidden sm:inline">
+                                <span x-text="selectedAccountIds.length"></span> selected
+                            </span>
                         </div>
-                        <p class="text-xs text-red-600 mb-2" x-show="errors.platforms || errors.platform_slugs" x-text="errors.platforms || errors.platform_slugs"></p>
+                        <p class="text-xs text-red-600 mb-2" x-show="errors.targeting" x-text="errors.targeting"></p>
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             @foreach ($platforms as $p)
                                 <button
                                     type="button"
-                                    @click="togglePlatform('{{ $p->id }}')"
+                                    @click="openModal('{{ $p->id }}')"
                                     class="relative border-2 rounded-xl p-4 text-left transition-all"
-                                    :class="btnPlatformClass(@js($p))"
-                                    :aria-disabled="isPaused('{{ $p->id }}') || ! canUse('{{ $p->id }}')"
+                                    :class="chipClass('{{ $p->id }}')"
+                                    :aria-disabled="chipState('{{ $p->id }}') === 'disabled'"
                                 >
                                     <div class="flex items-center gap-3">
                                         <div
                                             class="w-10 h-10 rounded-xl text-white text-sm font-semibold flex items-center justify-center"
-                                            :class="canUse('{{ $p->id }}') ? '{{ $p->gradientClass }}' : (isPaused('{{ $p->id }}') ? 'bg-amber-400' : 'bg-gray-300')"
+                                            :class="chipState('{{ $p->id }}') === 'disabled' ? 'bg-gray-300' : '{{ $p->gradientClass }}'"
                                         >
                                             <span>{{ $p->letter }}</span>
                                         </div>
-                                        <span class="text-sm font-semibold text-gray-800">
-                                            {{ $p->name }}
-                                            <span x-show="isPaused('{{ $p->id }}')" class="ml-1 text-[10px] text-amber-600">(paused)</span>
-                                            <span x-show="! canUse('{{ $p->id }}') && ! isPaused('{{ $p->id }}')" class="ml-1 text-[10px] text-gray-400">(not connected)</span>
-                                        </span>
+                                        <div class="min-w-0 flex-1">
+                                            <div class="text-sm font-semibold text-gray-800 truncate">{{ $p->name }}</div>
+                                            <div class="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1.5">
+                                                <span
+                                                    class="inline-block w-1.5 h-1.5 rounded-full"
+                                                    :class="{
+                                                        'bg-blue-500': chipState('{{ $p->id }}') === 'all',
+                                                        'bg-amber-500': chipState('{{ $p->id }}') === 'partial',
+                                                        'bg-gray-400': chipState('{{ $p->id }}') === 'none',
+                                                        'bg-gray-300': chipState('{{ $p->id }}') === 'disabled',
+                                                    }"
+                                                ></span>
+                                                <span x-text="chipBadgeText('{{ $p->id }}')"></span>
+                                            </div>
+                                        </div>
+                                        <svg
+                                            x-show="chipState('{{ $p->id }}') !== 'disabled'"
+                                            class="w-4 h-4 text-gray-400 shrink-0"
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"
+                                        >
+                                            <polyline points="9 18 15 12 9 6" />
+                                        </svg>
                                     </div>
-                                    <span
-                                        x-show="isSelected('{{ $p->id }}') && canUse('{{ $p->id }}')"
-                                        class="absolute top-2 right-2 w-5 h-5 rounded-full text-[10px] text-white flex items-center justify-center {{ $p->gradientClass }}"
-                                    >ok</span>
                                 </button>
                             @endforeach
                         </div>
@@ -523,7 +701,7 @@
                         </button>
                         <button
                             type="button"
-                            :disabled="saveDraftLoading || submitting"
+                            :disabled="saveDraftLoading || submitting || ! hasAnyTarget"
                             @click="runSubmit(scheduleMode === 'later' ? 'schedule' : 'now')"
                             class="flex-1 bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-60"
                         >
@@ -604,6 +782,140 @@
                                 ></div>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Account Targeting Modal --}}
+            <div
+                x-show="modalOpen"
+                x-cloak
+                class="fixed inset-0 z-50 flex items-center justify-center px-4 py-6"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="targeting-modal-title"
+            >
+                <div class="absolute inset-0 bg-gray-900/40" @click="closeModal()"></div>
+
+                <div
+                    class="relative w-full max-w-md bg-white rounded-xl border border-gray-200 shadow-xl flex flex-col max-h-[85vh]"
+                    @keydown.escape.window="closeModal()"
+                >
+                    {{-- Header --}}
+                    <div class="flex items-start justify-between gap-4 px-5 py-4 border-b border-gray-100">
+                        <div class="flex items-center gap-3 min-w-0">
+                            <span
+                                class="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                                :class="modalPlatformPillColor()"
+                            ></span>
+                            <div class="min-w-0">
+                                <h2 id="targeting-modal-title" class="text-base font-semibold text-gray-900 truncate">
+                                    <span x-text="modalPlatformLabel()"></span>
+                                </h2>
+                                <p class="text-xs text-gray-500 mt-0.5">
+                                    Choose which accounts &amp; pages will receive this post.
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            @click="closeModal()"
+                            class="text-gray-400 hover:text-gray-600 transition-colors"
+                            aria-label="Close modal"
+                        >
+                            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    {{-- Master toggle --}}
+                    <div
+                        x-show="modalPlatform && accountsFor(modalPlatform).filter(a => a.is_active).length > 1"
+                        class="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between"
+                    >
+                        <div>
+                            <p class="text-sm font-medium text-gray-900">Post to all pages</p>
+                            <p class="text-[11px] text-gray-500 mt-0.5">Toggle every page on or off at once.</p>
+                        </div>
+                        <button
+                            type="button"
+                            @click="toggleModalMaster()"
+                            :aria-pressed="modalMasterState() === 'on'"
+                            :class="modalMasterState() === 'on'
+                                ? 'bg-blue-600'
+                                : (modalMasterState() === 'indeterminate' ? 'bg-amber-400' : 'bg-gray-300')"
+                            class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                        >
+                            <span
+                                class="inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform"
+                                :class="modalMasterState() === 'on' ? 'translate-x-5' : 'translate-x-1'"
+                            ></span>
+                        </button>
+                    </div>
+
+                    {{-- Account list --}}
+                    <div class="flex-1 overflow-y-auto px-5 py-3 space-y-2">
+                        <template x-if="modalPlatform && accountsFor(modalPlatform).length === 0">
+                            <div class="text-center py-6 text-sm text-gray-500">
+                                No connected accounts for this platform yet.
+                                <a href="{{ route('accounts') }}" class="block mt-1 text-blue-600 hover:underline text-xs">Connect in Accounts &rarr;</a>
+                            </div>
+                        </template>
+
+                        <template x-for="account in accountsFor(modalPlatform)" :key="account.id">
+                            <div
+                                class="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors"
+                                :class="account.is_active ? '' : 'bg-gray-50'"
+                            >
+                                <div class="flex items-center gap-3 min-w-0 flex-1">
+                                    <div
+                                        class="w-9 h-9 rounded-full bg-gray-100 text-gray-500 text-xs font-semibold flex items-center justify-center shrink-0 overflow-hidden"
+                                    >
+                                        <template x-if="account.avatar">
+                                            <img :src="account.avatar" :alt="account.account_name" class="w-full h-full object-cover" />
+                                        </template>
+                                        <template x-if="! account.avatar">
+                                            <span x-text="(account.account_name || '?').slice(0, 2).toUpperCase()"></span>
+                                        </template>
+                                    </div>
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-medium text-gray-900 truncate" x-text="account.account_name"></p>
+                                        <p class="text-[11px] text-gray-500 truncate">
+                                            <span x-show="account.account_handle" x-text="account.account_handle"></span>
+                                            <span x-show="! account.is_active" class="text-amber-600 ml-1">(paused)</span>
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    :disabled="! account.is_active"
+                                    @click="toggleModalAccount(account.id, account)"
+                                    :aria-pressed="isModalAccountOn(account.id)"
+                                    :class="isModalAccountOn(account.id) ? 'bg-blue-600' : 'bg-gray-300'"
+                                    class="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <span
+                                        class="inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform"
+                                        :class="isModalAccountOn(account.id) ? 'translate-x-5' : 'translate-x-1'"
+                                    ></span>
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+
+                    {{-- Footer actions --}}
+                    <div class="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100">
+                        <button
+                            type="button"
+                            @click="closeModal()"
+                            class="px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                        >Cancel</button>
+                        <button
+                            type="button"
+                            @click="applyModal()"
+                            class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+                        >Apply</button>
                     </div>
                 </div>
             </div>

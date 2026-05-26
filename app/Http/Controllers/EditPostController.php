@@ -31,17 +31,21 @@ class EditPostController extends Controller
                 ->with('error', 'Only draft or scheduled posts can be edited.');
         }
 
-        $post->load(['postMedia', 'postTargets.socialPlatform']);
+        $post->load(['postMedia', 'postTargets.socialPlatform', 'postTargets.socialAccount']);
 
         $allowed = ['facebook', 'instagram', 'linkedin', 'twitter'];
 
-        $connectedSlugs = SocialAccount::query()
+        $accounts = SocialAccount::query()
             ->where('workspace_id', $workspace->id)
             ->where('is_connected', true)
             ->whereHas('platform', fn ($q) => $q->whereIn('slug', $allowed))
             ->with('platform')
             ->get()
-            ->filter(fn (SocialAccount $a) => ! ($a->token_expires_at?->isPast()))
+            ->filter(fn (SocialAccount $a) => ! ($a->token_expires_at?->isPast())
+                && in_array($a->platform?->slug, $allowed, true));
+
+        $connectedSlugs = $accounts
+            ->filter(fn (SocialAccount $a) => (bool) $a->is_active)
             ->map(fn (SocialAccount $a) => (string) $a->platform?->slug)
             ->unique()
             ->values();
@@ -53,12 +57,39 @@ class EditPostController extends Controller
             ->values()
             ->all();
 
+        // Account ids currently targeted by this post (used to pre-select the modal toggles).
+        $existingTargetAccountIds = $post->postTargets
+            ->map(fn ($t) => (int) $t->social_account_id)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $accountsByPlatform = $accounts
+            ->groupBy(fn (SocialAccount $a) => (string) $a->platform?->slug)
+            ->map(fn ($group) => $group
+                ->map(fn (SocialAccount $a) => [
+                    'id'             => (int) $a->id,
+                    'platform'       => (string) $a->platform?->slug,
+                    'account_name'   => (string) ($a->account_name ?: $a->account_handle ?: ('Account #'.$a->id)),
+                    'account_handle' => (string) ($a->account_handle ?? ''),
+                    'page_id'        => $a->platform_page_id ? (string) $a->platform_page_id : null,
+                    'avatar'         => $a->avatar,
+                    'is_active'      => (bool) $a->is_active,
+                ])
+                ->values()
+                ->all()
+            )
+            ->all();
+
         return view('posts.edit', [
-            'workspace'             => $workspace,
-            'post'                  => $post,
-            'connectedSlugs'        => $connectedSlugs,
-            'existingPlatformSlugs' => $existingPlatformSlugs,
-            'existingMedia'         => $post->postMedia->first(),
+            'workspace'                => $workspace,
+            'post'                     => $post,
+            'connectedSlugs'           => $connectedSlugs,
+            'existingPlatformSlugs'    => $existingPlatformSlugs,
+            'existingTargetAccountIds' => $existingTargetAccountIds,
+            'accountsByPlatform'       => $accountsByPlatform,
+            'existingMedia'            => $post->postMedia->first(),
         ]);
     }
 }
