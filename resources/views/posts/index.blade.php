@@ -30,6 +30,21 @@
         default => 'secondary',
     };
     $statusLabel = static fn (string $s): string => $s === '' ? '—' : (ucfirst($s));
+    $platformLabel = static fn (string $slug): string => match (strtolower($slug)) {
+        'facebook' => 'Facebook',
+        'instagram' => 'Instagram',
+        'linkedin' => 'LinkedIn',
+        'twitter', 'x' => 'X',
+        default => Str::ucfirst($slug),
+    };
+    $platformIcon = static fn (string $slug): string => match (strtolower($slug)) {
+        'facebook' => '📘',
+        'instagram' => '📸',
+        'linkedin' => '💼',
+        'twitter', 'x' => '𝕏',
+        default => '🔗',
+    };
+    $routeFor = static fn (array $params): string => route('posts.index', array_filter($params, fn ($value) => $value !== null && $value !== ''));
 @endphp
 
     <div class="flex flex-col min-h-full">
@@ -56,7 +71,11 @@
                         @foreach ($tabs as $label => $key)
                             @php
                                 $isActive = $filter === $key;
-                                $tabHref = $key === 'all' ? route('posts.index') : route('posts.index', ['status' => $key]);
+                                $parameters = ['platform' => $platformFilter !== 'all' ? $platformFilter : null];
+                                if ($key !== 'all') {
+                                    $parameters['status'] = $key;
+                                }
+                                $tabHref = $routeFor($parameters);
                                 $count = $key === 'all' ? $tabCounts['all'] : ($tabCounts[$key] ?? 0);
                             @endphp
                             <a
@@ -68,6 +87,67 @@
                             </a>
                         @endforeach
                     </div>
+
+                    @if ($showPlatformBar && $connectedPlatforms->isNotEmpty())
+                        @php
+                            $allPlatformCount = (int) ($platformCounts['all'] ?? 0);
+                            $filterParameters = ['status' => $filter !== 'all' ? $filter : null];
+                            $visiblePlatforms = $connectedPlatforms->slice(0, 4);
+                            $overflowPlatforms = $connectedPlatforms->slice(4);
+                        @endphp
+                        <div class="border-b border-gray-100 bg-gray-50 px-4 py-3">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <a
+                                    href="{{ $routeFor(array_merge($filterParameters, ['platform' => null])) }}"
+                                    class="inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-medium transition-colors {{ $platformFilter === 'all' ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-100' }}"
+                                >
+                                    <span>{{ __('All Platforms') }}</span>
+                                    <span class="ml-1 text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{{ $allPlatformCount }}</span>
+                                </a>
+
+                                @foreach ($visiblePlatforms as $platform)
+                                    @php
+                                        $slug = $platform->slug;
+                                        $isActivePlatform = $platformFilter === $slug;
+                                        $count = (int) ($platformCounts[$slug] ?? 0);
+                                    @endphp
+                                    <a
+                                        href="{{ $routeFor(array_merge($filterParameters, ['platform' => $slug])) }}"
+                                        class="inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-medium transition-colors {{ $isActivePlatform ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-100' }}"
+                                    >
+                                        <span>{{ $platformIcon($slug) }}</span>
+                                        <span>{{ $platformLabel($slug) }}</span>
+                                        <span class="ml-1 text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{{ $count }}</span>
+                                    </a>
+                                @endforeach
+
+                                @if ($overflowPlatforms->isNotEmpty())
+                                    <div class="relative group">
+                                        <button type="button" class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:border-gray-300 hover:bg-gray-100">
+                                            <span>{{ __('More') }}</span>
+                                            <span>▼</span>
+                                        </button>
+                                        <div class="absolute left-0 mt-2 w-48 rounded-xl border border-gray-200 bg-white shadow-lg hidden group-hover:block">
+                                            @foreach ($overflowPlatforms as $platform)
+                                                @php
+                                                    $slug = $platform->slug;
+                                                    $count = (int) ($platformCounts[$slug] ?? 0);
+                                                @endphp
+                                                <a
+                                                    href="{{ $routeFor(array_merge($filterParameters, ['platform' => $slug])) }}"
+                                                    class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                                >
+                                                    <span class="mr-2">{{ $platformIcon($slug) }}</span>
+                                                    <span>{{ $platformLabel($slug) }}</span>
+                                                    <span class="ml-2 inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">{{ $count }}</span>
+                                                </a>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                    @endif
 
                     @if ((int) $tabCounts['all'] === 0)
                         <div class="px-4 pb-6">
@@ -84,8 +164,25 @@
                             </x-empty-state>
                         </div>
                     @else
-                    <div class="overflow-x-auto">
-                    <table class="w-full min-w-[640px]">
+                        @if ($posts->isEmpty())
+                            @php
+                                $platformName = $platformFilter === 'all' ? __('All Platforms') : $platformLabel($platformFilter);
+                                $statusName = $filter === 'all' ? __('All') : $statusLabel($filter);
+                            @endphp
+                            <div class="px-4 pb-6">
+                                <x-empty-state
+                                    :title="__(':platform posts not found', ['platform' => $platformName])"
+                                    :description="__(':platform posts found for :status status.', ['platform' => $platformName, 'status' => $statusName])"
+                                >
+                                    <x-slot name="icon">
+                                        <span class="text-4xl">{{ $platformIcon($platformFilter === 'all' ? 'link' : $platformFilter) }}</span>
+                                    </x-slot>
+                                    <x-button variant="secondary" :href="route('posts.index')">{{ __('Clear Filters') }}</x-button>
+                                </x-empty-state>
+                            </div>
+                        @else
+                            <div class="overflow-x-auto">
+                            <table class="w-full min-w-[640px]">
                         <thead>
                             <tr class="border-b border-gray-100 bg-gray-50">
                                 <th class="text-left text-xs font-medium text-gray-500 px-4 py-3 uppercase tracking-wide">Caption</th>
@@ -186,10 +283,6 @@
                     </table>
                     </div>
 
-                    @if ($posts->isEmpty() && (int) $tabCounts['all'] > 0)
-                        <div class="px-4 py-8 text-center text-sm text-gray-500">{{ __('No posts found for this filter.') }}</div>
-                    @endif
-
                     @if ($posts->hasPages())
                         <div class="px-4 py-3 border-t border-gray-100">
                             {{ $posts->onEachSide(1)->links() }}
@@ -200,4 +293,5 @@
             @endif
         </div>
     </div>
+    @endif
 @endsection
