@@ -9,6 +9,7 @@ use App\Http\Controllers\LegalController;
 use App\Http\Controllers\PostsController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\SocialPostsController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -35,6 +36,7 @@ Route::middleware(['auth', 'workspace.context'])->group(function (): void {
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('create', [CreatePostController::class, 'index'])->name('create');
     Route::get('posts', [PostsController::class, 'index'])->name('posts.index');
+    Route::get('social-posts', [SocialPostsController::class, 'index'])->name('social-posts.index');
     Route::get('scheduled', [PostsController::class, 'scheduled'])->name('posts.scheduled');
     Route::get('posts/{post}/edit', [\App\Http\Controllers\EditPostController::class, 'show'])->name('posts.edit');
     Route::get('scheduled/{post}/edit', [PostsController::class, 'editScheduled'])->name('posts.scheduled.edit');

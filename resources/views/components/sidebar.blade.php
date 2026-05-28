@@ -17,12 +17,32 @@
 
     $navItems = [
         ['path' => '/dashboard', 'match' => 'dashboard', 'label' => 'Dashboard', 'icon' => 'dashboard'],
-        ['path' => '/posts', 'match' => 'posts*', 'label' => 'Posts', 'icon' => 'posts'],
-        
+        [
+            'type' => 'dropdown',
+            'match' => 'posts*|social-posts*',
+            'label' => 'Posts',
+            'icon' => 'posts',
+            'children' => [
+                ['path' => '/posts', 'match' => 'posts', 'label' => 'All Posts'],
+                ['path' => '/social-posts', 'match' => 'social-posts*', 'label' => 'Social Posts'],
+            ],
+        ],
         ['path' => '/accounts', 'match' => 'accounts', 'label' => 'Accounts', 'icon' => 'accounts'],
+        [
+            'type' => 'group',
+            'label' => 'Platforms',
+            'children' => [
+                ['path' => '/social-posts?platform=facebook', 'match' => 'social-posts*', 'label' => 'Facebook', 'icon' => 'facebook', 'platform' => 'facebook'],
+                ['path' => '/social-posts?platform=instagram', 'match' => 'social-posts*', 'label' => 'Instagram', 'icon' => 'instagram', 'platform' => 'instagram'],
+                ['path' => '/social-posts?platform=linkedin', 'match' => 'social-posts*', 'label' => 'LinkedIn', 'icon' => 'linkedin', 'platform' => 'linkedin'],
+                // Future platforms (uncomment when ready):
+                // ['path' => '/social-posts?platform=twitter', 'match' => 'social-posts*', 'label' => 'X (Twitter)', 'icon' => 'twitter', 'platform' => 'twitter'],
+                // ['path' => '/social-posts?platform=telegram', 'match' => 'social-posts*', 'label' => 'Telegram', 'icon' => 'telegram', 'platform' => 'telegram'],
+                // ['path' => '/social-posts?platform=reddit', 'match' => 'social-posts*', 'label' => 'Reddit', 'icon' => 'reddit', 'platform' => 'reddit'],
+            ],
+        ],
         ['path' => '/analytics', 'match' => 'analytics', 'label' => 'Analytics', 'icon' => 'analytics'],
         ['path' => '/activity', 'match' => 'activity', 'label' => 'Activity', 'icon' => 'activity'],
-        
         ['path' => '/settings', 'match' => 'settings', 'label' => 'Settings', 'icon' => 'settings'],
     ];
 @endphp
@@ -133,17 +153,126 @@
 
     <nav class="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto" aria-label="Main navigation">
         @foreach ($navItems as $item)
-            @php($active = request()->is($item['match']))
-            <a
-                href="{{ url($item['path']) }}"
-                x-bind:title="collapsed ? '{{ $item['label'] }}' : null"
-                class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group {{ $active ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900' }}"
-                x-bind:class="collapsed ? 'justify-center' : ''"
-                @if ($active) aria-current="page" @endif
-            >
-                <x-dynamic-component :component="'icons.' . $item['icon']" :active="$active" />
-                <span x-show="!collapsed">{{ $item['label'] }}</span>
-            </a>
+            @if (($item['type'] ?? '') === 'group')
+                <div x-show="!collapsed" class="pt-3 pb-1 px-3">
+                    <span class="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+                        {{ $item['label'] }}
+                    </span>
+                </div>
+                <div x-show="collapsed" class="pt-2 pb-1 px-3 border-t border-gray-100"></div>
+
+                @foreach ($item['children'] as $child)
+                    @php
+                        $childActive = request()->is('social-posts*')
+                            && request()->query('platform') === ($child['platform'] ?? null);
+                    @endphp
+                    <a
+                        href="{{ url($child['path']) }}"
+                        x-bind:title="collapsed ? '{{ $child['label'] }}' : null"
+                        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group
+                            {{ $childActive ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900' }}"
+                        x-bind:class="collapsed ? 'justify-center' : ''"
+                        @if ($childActive) aria-current="page" @endif
+                    >
+                        @if (View::exists('components.icons.' . $child['icon']))
+                            <x-dynamic-component :component="'icons.' . $child['icon']" :active="$childActive" />
+                        @else
+                            @php
+                                $platformColors = [
+                                    'facebook' => 'bg-blue-600',
+                                    'instagram' => 'bg-pink-500',
+                                    'linkedin' => 'bg-sky-600',
+                                    'twitter' => 'bg-gray-900',
+                                    'telegram' => 'bg-sky-400',
+                                    'reddit' => 'bg-orange-500',
+                                ];
+                                $dotColor = $platformColors[$child['platform']] ?? 'bg-gray-400';
+                                $platformInitials = strtoupper(substr($child['label'], 0, 2));
+                            @endphp
+                            <span class="w-5 h-5 rounded {{ $dotColor }} flex items-center justify-center text-white text-[9px] font-bold shrink-0">
+                                {{ $platformInitials }}
+                            </span>
+                        @endif
+                        <span x-show="!collapsed">{{ $child['label'] }}</span>
+                    </a>
+                @endforeach
+
+            @elseif (($item['type'] ?? '') === 'dropdown')
+                @php
+                    $dropdownActive = request()->is($item['match']);
+                    $dropdownHref = $item['children'][0]['path'] ?? '/posts';
+                @endphp
+                <div
+                    x-data="{ navOpen: {{ $dropdownActive ? 'true' : 'false' }} }"
+                    class="space-y-0.5"
+                >
+                    <a
+                        x-show="collapsed"
+                        href="{{ url($dropdownHref) }}"
+                        title="{{ $item['label'] }}"
+                        class="w-full flex items-center justify-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group
+                            {{ $dropdownActive ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900' }}"
+                    >
+                        <x-dynamic-component :component="'icons.' . $item['icon']" :active="$dropdownActive" />
+                    </a>
+
+                    <button
+                        type="button"
+                        x-show="!collapsed"
+                        x-on:click="navOpen = !navOpen"
+                        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group
+                            {{ $dropdownActive ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900' }}"
+                    >
+                        <x-dynamic-component :component="'icons.' . $item['icon']" :active="$dropdownActive" />
+                        <span class="flex-1 text-left">{{ $item['label'] }}</span>
+                        <svg
+                            class="shrink-0 text-gray-400 transition-transform"
+                            x-bind:class="navOpen ? 'rotate-180' : ''"
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            aria-hidden="true"
+                        >
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+
+                    <div x-show="navOpen && !collapsed" x-cloak class="ml-4 pl-2 border-l border-gray-100 space-y-0.5">
+                        @foreach ($item['children'] as $child)
+                            @php
+                                if (($child['path'] ?? '') === '/social-posts') {
+                                    $childActive = request()->is('social-posts*') && !request()->filled('platform');
+                                } else {
+                                    $childActive = request()->is($child['match'] ?? '');
+                                }
+                            @endphp
+                            <a
+                                href="{{ url($child['path']) }}"
+                                class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150
+                                    {{ $childActive ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900' }}"
+                                @if ($childActive) aria-current="page" @endif
+                            >
+                                {{ $child['label'] }}
+                            </a>
+                        @endforeach
+                    </div>
+                </div>
+
+            @else
+                @php $active = request()->is($item['match']); @endphp
+                <a
+                    href="{{ url($item['path']) }}"
+                    x-bind:title="collapsed ? '{{ $item['label'] }}' : null"
+                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group
+                        {{ $active ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900' }}"
+                    x-bind:class="collapsed ? 'justify-center' : ''"
+                    @if ($active) aria-current="page" @endif
+                >
+                    <x-dynamic-component :component="'icons.' . $item['icon']" :active="$active" />
+                    <span x-show="!collapsed">{{ $item['label'] }}</span>
+                </a>
+            @endif
         @endforeach
     </nav>
 
