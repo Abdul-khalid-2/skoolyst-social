@@ -87,9 +87,38 @@
                                             $rowSt    = $accountsHelper->accountRowStatus($acc);
                                             $ph       = $platform->slug;
                                             $isActive = (bool) $acc->is_active;
-                                            $folCount = (int) $acc->followers_count;
-                                            $ingCount = (int) $acc->following_count;
-                                            $posCount = (int) $acc->posts_count;
+
+                                            // Raw nullable stat values. null = "unavailable" -> render em-dash.
+                                            // 0 = "API confirmed zero" -> render "0".
+                                            $followersRaw = $acc->followers_count;
+                                            $followingRaw = $acc->following_count;
+                                            $postsRaw     = $acc->posts_count;
+
+                                            // Facebook Pages: posts + followers only (no likes/following).
+                                            // LinkedIn org pages: posts + followers only.
+                                            // Instagram / LinkedIn personal: posts + followers + following.
+                                            $accountType = (string) ($acc->meta['li_account_type'] ?? '');
+                                            $isLinkedInOrg = $ph === 'linkedin' && $accountType === 'organization';
+                                            $isFacebookPage = $ph === 'facebook';
+
+                                            // Renders a stat number with em-dash fallback for null/unavailable.
+                                            $renderStat = fn ($value) => $value === null
+                                                ? '<span class="text-gray-400" title="'.e(__('Unavailable')).'">'.'&mdash;'.'</span>'
+                                                : number_format((int) $value);
+
+                                            // Stale = never synced, or synced more than 1 hour ago.
+                                            $syncedAt = $acc->stats_synced_at;
+                                            $isStale = $syncedAt === null
+                                                || $syncedAt->lt(now()->subHour());
+
+                                            // "Stats unavailable" only when every stat we actually display is null.
+                                            if ($isFacebookPage || $isLinkedInOrg) {
+                                                $allStatsNull = $followersRaw === null && $postsRaw === null;
+                                            } else {
+                                                $allStatsNull = $followersRaw === null
+                                                    && $postsRaw === null
+                                                    && $followingRaw === null;
+                                            }
                                         @endphp
                                         <div class="flex items-start justify-between gap-3 py-2 border-t border-gray-100 first:border-t-0">
                                             {{-- Left: account info --}}
@@ -103,20 +132,33 @@
                                                             {{ __('Paused') }}
                                                         </span>
                                                     @endif
+                                                    @if ($isStale && ! $allStatsNull)
+                                                        <span
+                                                            class="inline-flex items-center text-gray-300 hover:text-amber-500 transition-colors"
+                                                            title="{{ $syncedAt
+                                                                ? __('Stats may be outdated (last synced :time). Click the refresh icon to update.', ['time' => $syncedAt->diffForHumans()])
+                                                                : __('Stats have never been synced for this account. Click the refresh icon to fetch them.') }}"
+                                                            aria-label="{{ __('Stats may be outdated') }}"
+                                                        >
+                                                            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                                                <circle cx="12" cy="12" r="10" />
+                                                                <line x1="12" y1="8" x2="12" y2="12" />
+                                                                <line x1="12" y1="16" x2="12.01" y2="16" />
+                                                            </svg>
+                                                        </span>
+                                                    @endif
                                                 </div>
                                                 <p class="text-xs text-gray-500 mt-0.5">
                                                     {{ $acc->account_handle ?: __('Connected account') }}
-                                                    @if ($ph === 'instagram')
-                                                        @if ($posCount > 0) · {{ number_format($posCount) }} {{ __('posts') }} @endif
-                                                        · {{ number_format($folCount) }} {{ __('followers') }}
-                                                        @if ($ingCount > 0) · {{ number_format($ingCount) }} {{ __('following') }} @endif
-                                                    @elseif ($ph === 'facebook')
-                                                        · {{ number_format($folCount) }} {{ __('followers') }}
-                                                        @if ($ingCount > 0) · {{ number_format($ingCount) }} {{ __('following') }} @endif
-                                                        @if ($posCount > 0) · {{ number_format($posCount) }} {{ __('posts') }} @endif
+                                                    @if ($allStatsNull)
+                                                        · <span class="text-gray-400 italic">{{ __('Stats unavailable') }}</span>
                                                     @else
-                                                        · {{ number_format($folCount) }} {{ __('followers') }}
-                                                        @if ($posCount > 0) · {{ number_format($posCount) }} {{ __('posts') }} @endif
+                                                        {{-- posts · followers; following only for personal-style accounts. --}}
+                                                        · {!! $renderStat($postsRaw) !!} {{ __('posts') }}
+                                                        · {!! $renderStat($followersRaw) !!} {{ __('followers') }}
+                                                        @if (! $isFacebookPage && ! $isLinkedInOrg)
+                                                            · {!! $renderStat($followingRaw) !!} {{ __('following') }}
+                                                        @endif
                                                     @endif
                                                 </p>
                                                 @if ($acc->token_expires_at

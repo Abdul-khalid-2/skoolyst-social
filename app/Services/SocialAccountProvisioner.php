@@ -83,6 +83,15 @@ class SocialAccountProvisioner
                 continue;
             }
 
+            // Distinguish "missing from API response" (null = unavailable) from
+            // a confirmed-zero count. The accounts UI renders null as an em-dash.
+            $followersCount = array_key_exists('followers_count', $page) ? (int) $page['followers_count'] : null;
+            $fanCount       = array_key_exists('fan_count', $page) ? (int) $page['fan_count'] : null;
+            // Facebook Pages do not have a "following" metric; do not fetch /likes for display.
+            $followingCount = null;
+            $postsCount     = self::fetchFacebookPagePostsCount($graphVersion, $pageId, $pageToken)
+                ?? self::fetchPagePostsCount($page);
+
             SocialAccount::query()->updateOrCreate(
                 [
                     'workspace_id' => $workspace->id,
@@ -96,10 +105,11 @@ class SocialAccountProvisioner
                     'avatar' => self::shortUrl($page['picture']['data']['url'] ?? null),
                     'access_token' => encrypt($pageToken),
                     'token_expires_at' => $expiresAt,
-                    'followers_count' => (int) ($page['followers_count'] ?? 0),
-                    'fan_count' => (int) ($page['fan_count'] ?? 0),
-                    'following_count' => ($pageToken !== '') ? self::fetchPageFollowingCount($graphVersion, $pageId, $pageToken) : 0,
-                    'posts_count' => self::fetchPagePostsCount($page),
+                    'followers_count' => $followersCount,
+                    'fan_count' => $fanCount,
+                    'following_count' => $followingCount,
+                    'posts_count' => $postsCount,
+                    'stats_synced_at' => now(),
                     'is_connected' => true,
                 ],
             );
@@ -315,19 +325,69 @@ class SocialAccountProvisioner
     }
 
     /**
+     * Fetch post count via the dedicated /posts edge. Embedded `posts.limit(0).summary(true)`
+     * on the page object often omits total_count; this call is the reliable source.
+     */
+    public static function fetchFacebookPagePostsCount(string $graphVersion, string $pageId, string $pageAccessToken): ?int
+    {
+        if ($pageId === '' || $pageAccessToken === '') {
+            return null;
+        }
+
+        try {
+            $response = Http::timeout(15)->get(
+                "https://graph.facebook.com/{$graphVersion}/{$pageId}/posts",
+                [
+                    'summary' => 'total_count',
+                    'limit' => 0,
+                    'access_token' => $pageAccessToken,
+                ]
+            );
+
+            if (! $response->successful()) {
+                Log::warning('Facebook page posts count unavailable', [
+                    'page_id' => $pageId,
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+
+                return null;
+            }
+
+            $total = $response->json('summary.total_count');
+
+            return is_numeric($total) ? (int) $total : null;
+        } catch (Throwable $e) {
+            Log::warning('Facebook page posts count fetch failed', [
+                'page_id' => $pageId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Fallback: read post count from an embedded posts edge on a page payload.
+     *
      * @param  array<string, mixed>  $page
      */
-    public static function fetchPagePostsCount(array $page): int
+    public static function fetchPagePostsCount(array $page): ?int
     {
         $posts = $page['posts'] ?? null;
         if (! is_array($posts)) {
-            return 0;
+            return null;
         }
 
-        return (int) (($posts['summary'] ?? [])['total_count'] ?? 0);
+        $summary = $posts['summary'] ?? null;
+        if (! is_array($summary) || ! array_key_exists('total_count', $summary)) {
+            return null;
+        }
+
+        return (int) $summary['total_count'];
     }
 
-    private static function fetchPageFollowingCount(string $graphVersion, string $pageId, string $pageAccessToken): int
+    public static function fetchPageFollowingCount(string $graphVersion, string $pageId, string $pageAccessToken): ?int
     {
         try {
             $response = Http::timeout(15)->get(
@@ -345,17 +405,19 @@ class SocialAccountProvisioner
                     'status' => $response->status(),
                 ]);
 
-                return 0;
+                return null;
             }
 
-            return (int) ($response->json('summary.total_count') ?? 0);
+            $total = $response->json('summary.total_count');
+
+            return is_numeric($total) ? (int) $total : null;
         } catch (Throwable $e) {
             Log::warning('Facebook page following count fetch failed', [
                 'page_id' => $pageId,
                 'error' => $e->getMessage(),
             ]);
 
-            return 0;
+            return null;
         }
     }
 
@@ -411,6 +473,17 @@ class SocialAccountProvisioner
             return;
         }
 
+        // Distinguish "API didn't return this field" (null) from a real zero.
+        $followers = array_key_exists('followers_count', $instagramBusinessAccount)
+            ? (int) $instagramBusinessAccount['followers_count']
+            : null;
+        $following = array_key_exists('follows_count', $instagramBusinessAccount)
+            ? (int) $instagramBusinessAccount['follows_count']
+            : null;
+        $posts = array_key_exists('media_count', $instagramBusinessAccount)
+            ? (int) $instagramBusinessAccount['media_count']
+            : null;
+
         SocialAccount::query()->updateOrCreate(
             [
                 'workspace_id' => $workspace->id,
@@ -424,10 +497,12 @@ class SocialAccountProvisioner
                 'avatar' => self::shortUrl($instagramBusinessAccount['profile_picture_url'] ?? null),
                 'access_token' => encrypt($pageAccessToken),
                 'token_expires_at' => $expiresAt,
-                'followers_count' => (int) ($instagramBusinessAccount['followers_count'] ?? 0),
-                'following_count' => (int) ($instagramBusinessAccount['follows_count'] ?? 0),
-                'posts_count' => (int) ($instagramBusinessAccount['media_count'] ?? 0),
-                'fan_count' => 0,
+                'followers_count' => $followers,
+                'following_count' => $following,
+                'posts_count' => $posts,
+                // Instagram has no equivalent of Facebook's fan_count ("likes").
+                'fan_count' => null,
+                'stats_synced_at' => now(),
                 'is_connected' => true,
                 'meta' => [
                     'facebook_page_id' => $facebookPageId,
@@ -437,6 +512,12 @@ class SocialAccountProvisioner
         );
     }
 
+    /**
+     * Connect/refresh a LinkedIn personal profile. The four count parameters are
+     * nullable: `null` means "could not be determined" (e.g. API doesn't expose
+     * the metric under our current scopes) and is rendered as `—` in the UI;
+     * an explicit `0` means "API confirmed zero".
+     */
     public static function connectLinkedInForWorkspace(
         Workspace $workspace,
         string $linkedInUserId,
@@ -446,7 +527,9 @@ class SocialAccountProvisioner
         ?string $displayName = null,
         ?string $avatarUrl = null,
         ?string $vanityName = null,
-        int $followersCount = 0
+        ?int $followersCount = null,
+        ?int $followingCount = null,
+        ?int $postsCount = null
     ): SocialAccount {
         $linkedin = SocialPlatform::query()
             ->where('slug', 'linkedin')
@@ -458,6 +541,10 @@ class SocialAccountProvisioner
         }
 
         $memberUrn = 'urn:li:person:'.$linkedInUserId;
+
+        // Stamp last-synced only when we actually fetched at least one stat; otherwise
+        // leave it null so the UI knows the row is "never synced".
+        $hasAnyStat = $followersCount !== null || $followingCount !== null || $postsCount !== null;
 
         return SocialAccount::query()->updateOrCreate(
             [
@@ -474,9 +561,10 @@ class SocialAccountProvisioner
                 'refresh_token' => $refreshToken ? encrypt($refreshToken) : null,
                 'token_expires_at' => $expiresAt,
                 'followers_count' => $followersCount,
-                'fan_count' => 0,
-                'following_count' => 0,
-                'posts_count' => 0,
+                'fan_count' => null,
+                'following_count' => $followingCount,
+                'posts_count' => $postsCount,
+                'stats_synced_at' => $hasAnyStat ? now() : null,
                 'is_connected' => true,
                 'meta' => [
                     'li_member_id' => $memberUrn,
@@ -487,6 +575,13 @@ class SocialAccountProvisioner
         );
     }
 
+    /**
+     * Connect/refresh a LinkedIn organization (company page). `followersCount`
+     * is typically populated from the `followingInfo.followerCount` field of
+     * the `organizationAcls` projection. Posts and following are not generally
+     * available without `r_organization_social` scope, so we leave them null
+     * (the UI hides "following" for orgs and renders `—` for posts).
+     */
     public static function connectLinkedInOrganizationForWorkspace(
         Workspace $workspace,
         string $linkedInUserId,
@@ -495,7 +590,9 @@ class SocialAccountProvisioner
         ?string $refreshToken = null,
         ?\Illuminate\Support\Carbon $expiresAt = null,
         ?string $organizationName = null,
-        ?string $avatarUrl = null
+        ?string $avatarUrl = null,
+        ?int $followersCount = null,
+        ?int $postsCount = null
     ): SocialAccount {
         $linkedin = SocialPlatform::query()
             ->where('slug', 'linkedin')
@@ -507,6 +604,8 @@ class SocialAccountProvisioner
         }
 
         $organizationUrn = 'urn:li:organization:'.$organizationId;
+
+        $hasAnyStat = $followersCount !== null || $postsCount !== null;
 
         return SocialAccount::query()->updateOrCreate(
             [
@@ -522,10 +621,12 @@ class SocialAccountProvisioner
                 'access_token' => encrypt($accessToken),
                 'refresh_token' => $refreshToken ? encrypt($refreshToken) : null,
                 'token_expires_at' => $expiresAt,
-                'followers_count' => 0,
-                'fan_count' => 0,
-                'following_count' => 0,
-                'posts_count' => 0,
+                'followers_count' => $followersCount,
+                'fan_count' => null,
+                // Companies don't have a "following" count in the IG/personal sense.
+                'following_count' => null,
+                'posts_count' => $postsCount,
+                'stats_synced_at' => $hasAnyStat ? now() : null,
                 'is_connected' => true,
                 'meta' => [
                     'li_member_id' => $organizationUrn,
@@ -534,5 +635,135 @@ class SocialAccountProvisioner
                 ],
             ],
         );
+    }
+
+    /**
+     * Best-effort fetch of follower/following/posts counts for a LinkedIn
+     * personal profile. Most installations only request OpenID-tier scopes
+     * (`openid profile email w_member_social`), so the calls below typically
+     * fail with 403; those return `null` rather than 0 so the UI can render
+     * an em-dash and prompt the user to reconnect with broader scopes.
+     *
+     * @return array{followers: ?int, following: ?int, posts: ?int}
+     */
+    public static function fetchLinkedInPersonStats(string $accessToken, string $linkedInUserId): array
+    {
+        $headers = [
+            'Authorization' => "Bearer {$accessToken}",
+            'LinkedIn-Version' => '202406',
+            'X-Restli-Protocol-Version' => '2.0.0',
+        ];
+
+        $personUrn = 'urn:li:person:'.$linkedInUserId;
+
+        $followers = self::tryFetchLinkedInCount(
+            'https://api.linkedin.com/v2/networkSizes/'.rawurlencode($personUrn),
+            ['edgeType' => 'CompanyFollowedByMember'],
+            $headers,
+            'firstDegreeSize',
+        );
+        // The /networkSizes endpoint with CompanyFollowedByMember returns how many
+        // companies the user follows. We surface this as "following" — followers
+        // for a personal profile aren't exposed by current LinkedIn APIs.
+        $following = $followers;
+
+        // For an actual follower (connection) count we'd need `r_basicprofile` or
+        // the legacy /v2/connections endpoint, which is not available under modern
+        // partner programs. Surface null and let the UI render an em-dash.
+        $followers = null;
+
+        // Best-effort post count — requires r_member_social or r_organization_social
+        // for paginated reads; under default OpenID scopes this returns 403, which
+        // we coerce to null.
+        $posts = self::tryFetchLinkedInPostsCount($personUrn, $headers);
+
+        return [
+            'followers' => $followers,
+            'following' => $following,
+            'posts' => $posts,
+        ];
+    }
+
+    /**
+     * Best-effort post count for a LinkedIn organization (company page). Requires
+     * `r_organization_social` (typically unavailable to standard apps), so this
+     * returns null on permission denial.
+     */
+    public static function fetchLinkedInOrganizationPostsCount(string $organizationId, string $accessToken): ?int
+    {
+        $headers = [
+            'Authorization' => "Bearer {$accessToken}",
+            'LinkedIn-Version' => '202406',
+            'X-Restli-Protocol-Version' => '2.0.0',
+        ];
+
+        return self::tryFetchLinkedInPostsCount('urn:li:organization:'.$organizationId, $headers);
+    }
+
+    /**
+     * @param  array<string, string>  $headers
+     */
+    private static function tryFetchLinkedInPostsCount(string $authorUrn, array $headers): ?int
+    {
+        try {
+            $response = Http::timeout(15)
+                ->withHeaders($headers)
+                ->get('https://api.linkedin.com/v2/ugcPosts', [
+                    'q' => 'authors',
+                    'authors' => 'List('.$authorUrn.')',
+                    'count' => 1,
+                    'start' => 0,
+                ]);
+
+            if (! $response->successful()) {
+                Log::warning('LinkedIn ugcPosts count unavailable', [
+                    'author' => $authorUrn,
+                    'status' => $response->status(),
+                ]);
+
+                return null;
+            }
+
+            $total = $response->json('paging.total');
+
+            return is_numeric($total) ? (int) $total : null;
+        } catch (Throwable $e) {
+            Log::warning('LinkedIn ugcPosts fetch failed', [
+                'author' => $authorUrn,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $query
+     * @param  array<string, string>  $headers
+     */
+    private static function tryFetchLinkedInCount(string $url, array $query, array $headers, string $jsonKey): ?int
+    {
+        try {
+            $response = Http::timeout(15)->withHeaders($headers)->get($url, $query);
+            if (! $response->successful()) {
+                Log::warning('LinkedIn count fetch unavailable', [
+                    'url' => $url,
+                    'status' => $response->status(),
+                ]);
+
+                return null;
+            }
+
+            $value = $response->json($jsonKey);
+
+            return is_numeric($value) ? (int) $value : null;
+        } catch (Throwable $e) {
+            Log::warning('LinkedIn count fetch failed', [
+                'url' => $url,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
     }
 }

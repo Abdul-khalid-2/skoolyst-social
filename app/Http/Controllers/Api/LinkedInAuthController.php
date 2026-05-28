@@ -86,6 +86,8 @@ class LinkedInAuthController extends Controller
                 $decryptedAccessToken  = $user->linkedin_access_token;
                 $decryptedRefreshToken = $user->linkedin_refresh_token;
 
+                $stats = SocialAccountProvisioner::fetchLinkedInPersonStats($decryptedAccessToken, $liId);
+
                 SocialAccountProvisioner::connectLinkedInForWorkspace(
                     $workspace,
                     $liId,
@@ -93,7 +95,11 @@ class LinkedInAuthController extends Controller
                     $decryptedRefreshToken,
                     $expiresAt,
                     $name,
-                    $avatar
+                    $avatar,
+                    null,
+                    $stats['followers'] ?? null,
+                    $stats['following'] ?? null,
+                    $stats['posts'] ?? null,
                 );
 
                 $this->fetchLinkedInOrganizations($workspace, $liId, $decryptedAccessToken, $expiresAt);
@@ -175,6 +181,8 @@ class LinkedInAuthController extends Controller
 
         $workspace = $user->workspaces()->wherePivot('is_active', true)->first();
         if ($workspace) {
+            $stats = SocialAccountProvisioner::fetchLinkedInPersonStats($user->linkedin_access_token, $liId);
+
             SocialAccountProvisioner::connectLinkedInForWorkspace(
                 $workspace,
                 $liId,
@@ -182,7 +190,11 @@ class LinkedInAuthController extends Controller
                 $user->linkedin_refresh_token,
                 $expiresAt,
                 $name,
-                $avatar
+                $avatar,
+                null,
+                $stats['followers'] ?? null,
+                $stats['following'] ?? null,
+                $stats['posts'] ?? null,
             );
 
             $this->fetchLinkedInOrganizations($workspace, $liId, $user->linkedin_access_token, $expiresAt);
@@ -220,6 +232,17 @@ class LinkedInAuthController extends Controller
                         $avatar = (string) $org['logoV2']['original~']['sourceUrl'];
                     }
 
+                    // followingInfo is already requested in the projection above —
+                    // surface its followerCount so the accounts UI can render it.
+                    $followers = null;
+                    $followingInfo = $org['followingInfo'] ?? null;
+                    if (is_array($followingInfo) && isset($followingInfo['followerCount'])
+                        && is_numeric($followingInfo['followerCount'])) {
+                        $followers = (int) $followingInfo['followerCount'];
+                    }
+
+                    $postsCount = SocialAccountProvisioner::fetchLinkedInOrganizationPostsCount($orgId, $accessToken);
+
                     SocialAccountProvisioner::connectLinkedInOrganizationForWorkspace(
                         $workspace,
                         $userUrn,
@@ -228,7 +251,9 @@ class LinkedInAuthController extends Controller
                         null,
                         $expiresAt,
                         $orgName,
-                        $avatar
+                        $avatar,
+                        $followers,
+                        $postsCount,
                     );
                 }
             }

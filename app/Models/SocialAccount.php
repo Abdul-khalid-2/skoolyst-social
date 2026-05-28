@@ -24,6 +24,7 @@ class SocialAccount extends Model
         'fan_count',
         'following_count',
         'posts_count',
+        'stats_synced_at',
         'is_connected',
         'is_active',
         'meta',
@@ -33,6 +34,7 @@ class SocialAccount extends Model
     {
         return [
             'token_expires_at' => 'datetime',
+            'stats_synced_at' => 'datetime',
             'scopes' => 'array',
             'meta' => 'array',
             'followers_count' => 'integer',

@@ -306,10 +306,16 @@ class SocialAccountController extends Controller
                 'avatar' => $this->shortUrl($selectedPage['picture']['data']['url'] ?? null),
                 'access_token' => encrypt($pageToken),
                 'token_expires_at' => $user?->facebook_token_expires_at,
-                'followers_count' => (int) ($selectedPage['followers_count'] ?? 0),
-                'fan_count' => (int) ($selectedPage['fan_count'] ?? 0),
-                'following_count' => SocialAccountProvisioner::pageFollowingCountFromLikesEdge($selectedPage),
-                'posts_count' => SocialAccountProvisioner::fetchPagePostsCount($selectedPage),
+                'followers_count' => array_key_exists('followers_count', $selectedPage)
+                    ? (int) $selectedPage['followers_count']
+                    : null,
+                'fan_count' => array_key_exists('fan_count', $selectedPage)
+                    ? (int) $selectedPage['fan_count']
+                    : null,
+                'following_count' => null,
+                'posts_count' => SocialAccountProvisioner::fetchFacebookPagePostsCount($graphVersion, $pageId, $pageToken)
+                    ?? SocialAccountProvisioner::fetchPagePostsCount($selectedPage),
+                'stats_synced_at' => now(),
                 'is_connected' => true,
             ],
         );
