@@ -119,6 +119,10 @@
                                                     && $postsRaw === null
                                                     && $followingRaw === null;
                                             }
+
+                                            $isLinkedInPersonal = $accountsHelper->isLinkedInPersonalProfile($acc, $ph);
+                                            $linkedInStatsNotExposed = $accountsHelper->linkedInPersonalStatsNotExposed($acc, $ph, $allStatsNull);
+                                            $displayHandle = $accountsHelper->displayAccountHandle($acc, $ph);
                                         @endphp
                                         <div class="flex items-start justify-between gap-3 py-2 border-t border-gray-100 first:border-t-0">
                                             {{-- Left: account info --}}
@@ -149,8 +153,10 @@
                                                     @endif
                                                 </div>
                                                 <p class="text-xs text-gray-500 mt-0.5">
-                                                    {{ $acc->account_handle ?: __('Connected account') }}
-                                                    @if ($allStatsNull)
+                                                    {{ $displayHandle }}
+                                                    @if ($linkedInStatsNotExposed)
+                                                        · <span class="text-gray-400 italic">{{ __('Ready to publish') }}</span>
+                                                    @elseif ($allStatsNull)
                                                         · <span class="text-gray-400 italic">{{ __('Stats unavailable') }}</span>
                                                     @else
                                                         {{-- posts · followers; following only for personal-style accounts. --}}

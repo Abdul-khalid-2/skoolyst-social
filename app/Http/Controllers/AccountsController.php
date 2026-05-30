@@ -196,11 +196,24 @@ class AccountsController extends Controller
 
         $stats = SocialAccountProvisioner::fetchLinkedInPersonStats($accessToken, $userId);
 
-        return [
+        $updates = [
             'followers_count' => $stats['followers'] ?? null,
             'following_count' => $stats['following'] ?? null,
             'posts_count'     => $stats['posts'] ?? null,
+            'stats_synced_at' => now(),
         ];
+
+        $storedHandle = trim((string) ($account->account_handle ?? ''));
+        if ($storedHandle === '' || $storedHandle === $userId) {
+            $repaired = SocialAccountProvisioner::resolveLinkedInPersonHandle(
+                (string) ($account->meta['li_vanity_name'] ?? ''),
+                (string) ($account->meta['li_profile_email'] ?? ''),
+                $userId,
+            );
+            $updates['account_handle'] = $repaired;
+        }
+
+        return $updates;
     }
 
     private function fetchLinkedInOrgFollowerCount(string $organizationId, string $accessToken): ?int

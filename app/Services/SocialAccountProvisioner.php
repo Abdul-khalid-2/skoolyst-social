@@ -7,6 +7,7 @@ use App\Models\SocialPlatform;
 use App\Models\Workspace;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Throwable;
 
 class SocialAccountProvisioner
@@ -527,6 +528,7 @@ class SocialAccountProvisioner
         ?string $displayName = null,
         ?string $avatarUrl = null,
         ?string $vanityName = null,
+        ?string $profileEmail = null,
         ?int $followersCount = null,
         ?int $followingCount = null,
         ?int $postsCount = null
@@ -542,10 +544,6 @@ class SocialAccountProvisioner
 
         $memberUrn = 'urn:li:person:'.$linkedInUserId;
 
-        // Stamp last-synced only when we actually fetched at least one stat; otherwise
-        // leave it null so the UI knows the row is "never synced".
-        $hasAnyStat = $followersCount !== null || $followingCount !== null || $postsCount !== null;
-
         return SocialAccount::query()->updateOrCreate(
             [
                 'workspace_id' => $workspace->id,
@@ -555,7 +553,7 @@ class SocialAccountProvisioner
             [
                 'platform_page_id' => null,
                 'account_name' => $displayName ?: 'LinkedIn Profile',
-                'account_handle' => $vanityName ?: $linkedInUserId,
+                'account_handle' => self::resolveLinkedInPersonHandle($vanityName, $profileEmail, $linkedInUserId),
                 'avatar' => self::shortUrl($avatarUrl),
                 'access_token' => encrypt($accessToken),
                 'refresh_token' => $refreshToken ? encrypt($refreshToken) : null,
@@ -564,15 +562,49 @@ class SocialAccountProvisioner
                 'fan_count' => null,
                 'following_count' => $followingCount,
                 'posts_count' => $postsCount,
-                'stats_synced_at' => $hasAnyStat ? now() : null,
+                // Always stamp sync time so the UI does not treat a connected profile as "never synced"
+                // when LinkedIn simply does not expose follower/post counts under our scopes.
+                'stats_synced_at' => now(),
                 'is_connected' => true,
                 'meta' => [
                     'li_member_id' => $memberUrn,
                     'li_account_type' => 'person',
                     'li_vanity_name' => $vanityName,
+                    'li_profile_email' => self::normalizeLinkedInProfileEmail($profileEmail),
                 ],
             ],
         );
+    }
+
+    /**
+     * Human-readable subtitle for a LinkedIn personal profile (never the opaque member id).
+     */
+    public static function resolveLinkedInPersonHandle(
+        ?string $vanityName,
+        ?string $profileEmail,
+        string $linkedInUserId,
+    ): ?string {
+        $vanity = trim((string) $vanityName);
+        if ($vanity !== '' && $vanity !== $linkedInUserId) {
+            return $vanity;
+        }
+
+        $email = self::normalizeLinkedInProfileEmail($profileEmail);
+        if ($email !== null) {
+            return $email;
+        }
+
+        return null;
+    }
+
+    public static function normalizeLinkedInProfileEmail(?string $email): ?string
+    {
+        $email = Str::lower(trim((string) $email));
+        if ($email === '' || str_contains($email, '@users.linkedin.local')) {
+            return null;
+        }
+
+        return $email;
     }
 
     /**

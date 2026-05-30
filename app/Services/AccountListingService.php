@@ -121,6 +121,73 @@ class AccountListingService
         return $fallbacks[$platform->slug] ?? ['from' => '#6b7280', 'to' => '#4b5563'];
     }
 
+    /**
+     * Subtitle under the account name on the Accounts page (handle, email, etc.).
+     */
+    public function displayAccountHandle(SocialAccount $account, string $platformSlug): string
+    {
+        $handle = trim((string) ($account->account_handle ?? ''));
+        $accountType = (string) ($account->meta['li_account_type'] ?? '');
+
+        if ($platformSlug === 'linkedin') {
+            if ($accountType === 'organization') {
+                $orgId = (string) ($account->platform_page_id ?? '');
+                if ($handle !== '' && $handle !== $orgId) {
+                    return $handle;
+                }
+
+                return (string) __('Company page');
+            }
+
+            $memberId = (string) ($account->platform_user_id ?? '');
+            $vanity = trim((string) ($account->meta['li_vanity_name'] ?? ''));
+            if ($vanity !== '' && $vanity !== $memberId) {
+                return $vanity;
+            }
+
+            $profileEmail = SocialAccountProvisioner::normalizeLinkedInProfileEmail(
+                (string) ($account->meta['li_profile_email'] ?? $handle),
+            );
+            if ($profileEmail !== null) {
+                return $profileEmail;
+            }
+
+            if ($handle !== '' && $handle !== $memberId && ! $this->looksLikeLinkedInMemberId($handle)) {
+                return $handle;
+            }
+
+            return (string) __('Personal profile');
+        }
+
+        if ($handle !== '') {
+            return $handle;
+        }
+
+        return (string) __('Connected account');
+    }
+
+    public function isLinkedInPersonalProfile(SocialAccount $account, string $platformSlug): bool
+    {
+        if ($platformSlug !== 'linkedin') {
+            return false;
+        }
+
+        return (string) ($account->meta['li_account_type'] ?? 'person') !== 'organization';
+    }
+
+    /**
+     * LinkedIn personal profiles rarely expose follower/post counts under OpenID scopes.
+     */
+    public function linkedInPersonalStatsNotExposed(SocialAccount $account, string $platformSlug, bool $allStatsNull): bool
+    {
+        return $allStatsNull && $this->isLinkedInPersonalProfile($account, $platformSlug);
+    }
+
+    private function looksLikeLinkedInMemberId(string $value): bool
+    {
+        return (bool) preg_match('/^[A-Za-z0-9]{8,12}$/', $value);
+    }
+
     public function shortBadgeLabel(SocialPlatform $platform): string
     {
         $n = trim($platform->name);
