@@ -13,6 +13,7 @@ use App\Models\Workspace;
 use App\Services\InstagramPostService;
 use App\Services\LinkedInPostService;
 use App\Services\SocialPostService;
+use App\Support\SocialPublishErrorFormatter;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -484,7 +485,7 @@ class PostController extends Controller
                 }
 
                 $failed++;
-                $error = (string) ($result['error'] ?? 'Facebook publish failed.');
+                $error = SocialPublishErrorFormatter::format((string) ($result['error'] ?? 'Facebook publish failed.'));
                 $target->update([
                     'status' => 'failed',
                     'error_message' => $error,
@@ -511,7 +512,7 @@ class PostController extends Controller
                 }
 
                 $failed++;
-                $error = (string) ($result['error'] ?? 'Instagram publish failed.');
+                $error = SocialPublishErrorFormatter::format((string) ($result['error'] ?? 'Instagram publish failed.'));
                 $target->update([
                     'status' => 'failed',
                     'error_message' => $error,

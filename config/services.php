@@ -108,6 +108,15 @@ return [
         'client_id' => env('LINKEDIN_CLIENT_ID'),
         'client_secret' => env('LINKEDIN_CLIENT_SECRET'),
         'redirect' => env('LINKEDIN_REDIRECT_URI'),
+        // REST analytics/posts APIs (memberFollowersCount requires >= 202504).
+        'rest_version' => env('LINKEDIN_REST_API_VERSION', '202504'),
+        'oauth_scopes' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env(
+                'LINKEDIN_OAUTH_SCOPES',
+                'openid,profile,email,w_member_social,r_member_profileAnalytics'
+            ))
+        ))),
     ],
 
     'linkedin-openid' => [
@@ -121,7 +130,10 @@ return [
     */
     'social_publish' => [
         'max_execution_seconds' => (int) env('SOCIAL_PUBLISH_MAX_EXECUTION', 600),
+        'facebook_image_timeout' => (int) env('FACEBOOK_IMAGE_UPLOAD_TIMEOUT', 120),
         'facebook_video_timeout' => (int) env('FACEBOOK_VIDEO_UPLOAD_TIMEOUT', 600),
+        'instagram_status_max_attempts' => (int) env('INSTAGRAM_STATUS_MAX_ATTEMPTS', 10),
+        'instagram_status_sleep_seconds' => (int) env('INSTAGRAM_STATUS_SLEEP_SECONDS', 5),
     ],
 
 ];

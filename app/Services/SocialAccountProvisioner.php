@@ -553,7 +553,7 @@ class SocialAccountProvisioner
             [
                 'platform_page_id' => null,
                 'account_name' => $displayName ?: 'LinkedIn Profile',
-                'account_handle' => self::resolveLinkedInPersonHandle($vanityName, $profileEmail, $linkedInUserId),
+                'account_handle' => self::linkedInPersonHandleForStorage($vanityName, $linkedInUserId),
                 'avatar' => self::shortUrl($avatarUrl),
                 'access_token' => encrypt($accessToken),
                 'refresh_token' => $refreshToken ? encrypt($refreshToken) : null,
@@ -577,24 +577,52 @@ class SocialAccountProvisioner
     }
 
     /**
-     * Human-readable subtitle for a LinkedIn personal profile (never the opaque member id).
+     * Subtitle handle shown on the Accounts page (vanity slug or LinkedIn member id).
      */
-    public static function resolveLinkedInPersonHandle(
-        ?string $vanityName,
-        ?string $profileEmail,
-        string $linkedInUserId,
-    ): ?string {
+    public static function linkedInPersonHandleForStorage(?string $vanityName, string $linkedInUserId): string
+    {
         $vanity = trim((string) $vanityName);
-        if ($vanity !== '' && $vanity !== $linkedInUserId) {
-            return $vanity;
-        }
 
-        $email = self::normalizeLinkedInProfileEmail($profileEmail);
-        if ($email !== null) {
-            return $email;
-        }
+        return ($vanity !== '' && $vanity !== $linkedInUserId) ? $vanity : $linkedInUserId;
+    }
 
-        return null;
+    public static function fetchLinkedInVanityName(string $accessToken): ?string
+    {
+        try {
+            $response = Http::timeout(10)
+                ->withHeaders([
+                    'Authorization' => "Bearer {$accessToken}",
+                    'LinkedIn-Version' => '202406',
+                    'X-Restli-Protocol-Version' => '2.0.0',
+                ])
+                ->get('https://api.linkedin.com/v2/me', [
+                    'projection' => '(id,vanityName)',
+                ]);
+
+            if (! $response->successful()) {
+                return null;
+            }
+
+            $vanity = $response->json('vanityName');
+
+            return is_string($vanity) && $vanity !== '' ? $vanity : null;
+        } catch (Throwable $e) {
+            Log::debug('LinkedIn vanityName fetch failed', ['error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function linkedInRestHeaders(string $accessToken): array
+    {
+        return [
+            'Authorization' => "Bearer {$accessToken}",
+            'LinkedIn-Version' => (string) config('services.linkedin.rest_version', '202504'),
+            'X-Restli-Protocol-Version' => '2.0.0',
+        ];
     }
 
     public static function normalizeLinkedInProfileEmail(?string $email): ?string
@@ -680,40 +708,87 @@ class SocialAccountProvisioner
      */
     public static function fetchLinkedInPersonStats(string $accessToken, string $linkedInUserId): array
     {
-        $headers = [
-            'Authorization' => "Bearer {$accessToken}",
-            'LinkedIn-Version' => '202406',
-            'X-Restli-Protocol-Version' => '2.0.0',
-        ];
-
         $personUrn = 'urn:li:person:'.$linkedInUserId;
+        $headers = self::linkedInRestHeaders($accessToken);
 
-        $followers = self::tryFetchLinkedInCount(
-            'https://api.linkedin.com/v2/networkSizes/'.rawurlencode($personUrn),
-            ['edgeType' => 'CompanyFollowedByMember'],
-            $headers,
-            'firstDegreeSize',
-        );
-        // The /networkSizes endpoint with CompanyFollowedByMember returns how many
-        // companies the user follows. We surface this as "following" — followers
-        // for a personal profile aren't exposed by current LinkedIn APIs.
-        $following = $followers;
-
-        // For an actual follower (connection) count we'd need `r_basicprofile` or
-        // the legacy /v2/connections endpoint, which is not available under modern
-        // partner programs. Surface null and let the UI render an em-dash.
-        $followers = null;
-
-        // Best-effort post count — requires r_member_social or r_organization_social
-        // for paginated reads; under default OpenID scopes this returns 403, which
-        // we coerce to null.
-        $posts = self::tryFetchLinkedInPostsCount($personUrn, $headers);
+        $followers = self::fetchLinkedInMemberFollowersCount($accessToken);
+        $posts = self::fetchLinkedInAuthorPostsCount($accessToken, $personUrn, $headers);
 
         return [
             'followers' => $followers,
-            'following' => $following,
+            'following' => null,
             'posts' => $posts,
         ];
+    }
+
+    public static function fetchLinkedInMemberFollowersCount(string $accessToken): ?int
+    {
+        try {
+            $response = Http::timeout(15)
+                ->withHeaders(self::linkedInRestHeaders($accessToken))
+                ->get('https://api.linkedin.com/rest/memberFollowersCount', ['q' => 'me']);
+
+            if (! $response->successful()) {
+                Log::warning('LinkedIn memberFollowersCount unavailable', [
+                    'status' => $response->status(),
+                    'body' => $response->json(),
+                ]);
+
+                return null;
+            }
+
+            $elements = $response->json('elements');
+            if (! is_array($elements) || $elements === []) {
+                return null;
+            }
+
+            $count = $elements[0]['memberFollowersCount'] ?? null;
+
+            return is_numeric($count) ? (int) $count : null;
+        } catch (Throwable $e) {
+            Log::warning('LinkedIn memberFollowersCount fetch failed', ['error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    /**
+     * @param  array<string, string>  $headers
+     */
+    public static function fetchLinkedInAuthorPostsCount(string $accessToken, string $authorUrn, ?array $headers = null): ?int
+    {
+        $headers ??= self::linkedInRestHeaders($accessToken);
+
+        try {
+            $response = Http::timeout(15)
+                ->withHeaders($headers)
+                ->get('https://api.linkedin.com/rest/posts', [
+                    'q' => 'author',
+                    'author' => $authorUrn,
+                    'count' => 1,
+                    'start' => 0,
+                ]);
+
+            if ($response->successful()) {
+                $total = $response->json('paging.total');
+                if (is_numeric($total)) {
+                    return (int) $total;
+                }
+            } else {
+                Log::warning('LinkedIn rest/posts count unavailable', [
+                    'author' => $authorUrn,
+                    'status' => $response->status(),
+                    'body' => $response->json(),
+                ]);
+            }
+        } catch (Throwable $e) {
+            Log::warning('LinkedIn rest/posts fetch failed', [
+                'author' => $authorUrn,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return self::tryFetchLinkedInPostsCount($authorUrn, $headers);
     }
 
     /**
@@ -729,7 +804,11 @@ class SocialAccountProvisioner
             'X-Restli-Protocol-Version' => '2.0.0',
         ];
 
-        return self::tryFetchLinkedInPostsCount('urn:li:organization:'.$organizationId, $headers);
+        return self::fetchLinkedInAuthorPostsCount(
+            $accessToken,
+            'urn:li:organization:'.$organizationId,
+            $headers,
+        );
     }
 
     /**

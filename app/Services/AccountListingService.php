@@ -145,18 +145,11 @@ class AccountListingService
                 return $vanity;
             }
 
-            $profileEmail = SocialAccountProvisioner::normalizeLinkedInProfileEmail(
-                (string) ($account->meta['li_profile_email'] ?? $handle),
-            );
-            if ($profileEmail !== null) {
-                return $profileEmail;
-            }
-
-            if ($handle !== '' && $handle !== $memberId && ! $this->looksLikeLinkedInMemberId($handle)) {
+            if ($handle !== '') {
                 return $handle;
             }
 
-            return (string) __('Personal profile');
+            return $memberId !== '' ? $memberId : (string) __('Connected account');
         }
 
         if ($handle !== '') {
@@ -173,19 +166,6 @@ class AccountListingService
         }
 
         return (string) ($account->meta['li_account_type'] ?? 'person') !== 'organization';
-    }
-
-    /**
-     * LinkedIn personal profiles rarely expose follower/post counts under OpenID scopes.
-     */
-    public function linkedInPersonalStatsNotExposed(SocialAccount $account, string $platformSlug, bool $allStatsNull): bool
-    {
-        return $allStatsNull && $this->isLinkedInPersonalProfile($account, $platformSlug);
-    }
-
-    private function looksLikeLinkedInMemberId(string $value): bool
-    {
-        return (bool) preg_match('/^[A-Za-z0-9]{8,12}$/', $value);
     }
 
     public function shortBadgeLabel(SocialPlatform $platform): string

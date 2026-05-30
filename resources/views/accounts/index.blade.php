@@ -121,7 +121,6 @@
                                             }
 
                                             $isLinkedInPersonal = $accountsHelper->isLinkedInPersonalProfile($acc, $ph);
-                                            $linkedInStatsNotExposed = $accountsHelper->linkedInPersonalStatsNotExposed($acc, $ph, $allStatsNull);
                                             $displayHandle = $accountsHelper->displayAccountHandle($acc, $ph);
                                         @endphp
                                         <div class="flex items-start justify-between gap-3 py-2 border-t border-gray-100 first:border-t-0">
@@ -154,19 +153,21 @@
                                                 </div>
                                                 <p class="text-xs text-gray-500 mt-0.5">
                                                     {{ $displayHandle }}
-                                                    @if ($linkedInStatsNotExposed)
-                                                        · <span class="text-gray-400 italic">{{ __('Ready to publish') }}</span>
-                                                    @elseif ($allStatsNull)
-                                                        · <span class="text-gray-400 italic">{{ __('Stats unavailable') }}</span>
-                                                    @else
-                                                        {{-- posts · followers; following only for personal-style accounts. --}}
+                                                    @if ($isLinkedInPersonal || ! $allStatsNull)
                                                         · {!! $renderStat($postsRaw) !!} {{ __('posts') }}
                                                         · {!! $renderStat($followersRaw) !!} {{ __('followers') }}
                                                         @if (! $isFacebookPage && ! $isLinkedInOrg)
                                                             · {!! $renderStat($followingRaw) !!} {{ __('following') }}
                                                         @endif
+                                                    @else
+                                                        · <span class="text-gray-400 italic">{{ __('Stats unavailable') }}</span>
                                                     @endif
                                                 </p>
+                                                @if ($isLinkedInPersonal && $allStatsNull)
+                                                    <p class="text-xs text-gray-400 mt-1">
+                                                        {{ __('Disconnect and reconnect LinkedIn to grant analytics permissions, then click refresh.') }}
+                                                    </p>
+                                                @endif
                                                 @if ($acc->token_expires_at
                                                     && $acc->token_expires_at->isFuture()
                                                     && $acc->token_expires_at->getTimestamp() - now()->getTimestamp() < 3 * 24 * 60 * 60)

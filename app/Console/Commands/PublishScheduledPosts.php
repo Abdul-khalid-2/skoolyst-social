@@ -6,6 +6,7 @@ use App\Models\Post;
 use App\Services\InstagramPostService;
 use App\Services\LinkedInPostService;
 use App\Services\SocialPostService;
+use App\Support\SocialPublishErrorFormatter;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -137,7 +138,7 @@ class PublishScheduledPosts extends Command
                 }
 
                 $failed++;
-                $error = (string) ($result['error'] ?? 'Facebook publish failed.');
+                $error = SocialPublishErrorFormatter::format((string) ($result['error'] ?? 'Facebook publish failed.'));
                 $target->update([
                     'status' => 'failed',
                     'error_message' => $error,
@@ -164,7 +165,7 @@ class PublishScheduledPosts extends Command
                 }
 
                 $failed++;
-                $error = (string) ($result['error'] ?? 'Instagram publish failed.');
+                $error = SocialPublishErrorFormatter::format((string) ($result['error'] ?? 'Instagram publish failed.'));
                 $target->update([
                     'status' => 'failed',
                     'error_message' => $error,

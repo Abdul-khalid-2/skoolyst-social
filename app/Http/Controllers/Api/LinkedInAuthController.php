@@ -23,14 +23,18 @@ class LinkedInAuthController extends Controller
 {
     public function redirectToLinkedIn(): RedirectResponse
     {
+        $scopes = config('services.linkedin.oauth_scopes', [
+            'openid',
+            'profile',
+            'email',
+            'w_member_social',
+            'r_member_profileAnalytics',
+        ]);
+
         return Socialite::driver('linkedin-openid')
-            ->scopes([
-                'openid',
-                'profile',
-                'email',
-                'w_member_social',
-            ])
-            ->stateless()  // ← add this
+            ->scopes($scopes)
+            ->with(['prompt' => 'login'])
+            ->stateless()
             ->redirect();
     }
 
@@ -86,6 +90,7 @@ class LinkedInAuthController extends Controller
                 $decryptedAccessToken  = $user->linkedin_access_token;
                 $decryptedRefreshToken = $user->linkedin_refresh_token;
 
+                $vanityName = SocialAccountProvisioner::fetchLinkedInVanityName($decryptedAccessToken);
                 $stats = SocialAccountProvisioner::fetchLinkedInPersonStats($decryptedAccessToken, $liId);
 
                 SocialAccountProvisioner::connectLinkedInForWorkspace(
@@ -96,7 +101,7 @@ class LinkedInAuthController extends Controller
                     $expiresAt,
                     $name,
                     $avatar,
-                    null,
+                    $vanityName,
                     $email,
                     $stats['followers'] ?? null,
                     $stats['following'] ?? null,
@@ -182,6 +187,7 @@ class LinkedInAuthController extends Controller
 
         $workspace = $user->workspaces()->wherePivot('is_active', true)->first();
         if ($workspace) {
+            $vanityName = SocialAccountProvisioner::fetchLinkedInVanityName($user->linkedin_access_token);
             $stats = SocialAccountProvisioner::fetchLinkedInPersonStats($user->linkedin_access_token, $liId);
 
             SocialAccountProvisioner::connectLinkedInForWorkspace(
@@ -192,7 +198,7 @@ class LinkedInAuthController extends Controller
                 $expiresAt,
                 $name,
                 $avatar,
-                null,
+                $vanityName,
                 $email,
                 $stats['followers'] ?? null,
                 $stats['following'] ?? null,

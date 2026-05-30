@@ -196,6 +196,8 @@ class AccountsController extends Controller
 
         $stats = SocialAccountProvisioner::fetchLinkedInPersonStats($accessToken, $userId);
 
+        $vanityName = SocialAccountProvisioner::fetchLinkedInVanityName($accessToken);
+
         $updates = [
             'followers_count' => $stats['followers'] ?? null,
             'following_count' => $stats['following'] ?? null,
@@ -203,14 +205,11 @@ class AccountsController extends Controller
             'stats_synced_at' => now(),
         ];
 
-        $storedHandle = trim((string) ($account->account_handle ?? ''));
-        if ($storedHandle === '' || $storedHandle === $userId) {
-            $repaired = SocialAccountProvisioner::resolveLinkedInPersonHandle(
-                (string) ($account->meta['li_vanity_name'] ?? ''),
-                (string) ($account->meta['li_profile_email'] ?? ''),
-                $userId,
-            );
-            $updates['account_handle'] = $repaired;
+        if ($vanityName !== null) {
+            $updates['account_handle'] = SocialAccountProvisioner::linkedInPersonHandleForStorage($vanityName, $userId);
+            $meta = is_array($account->meta) ? $account->meta : [];
+            $meta['li_vanity_name'] = $vanityName;
+            $updates['meta'] = $meta;
         }
 
         return $updates;
