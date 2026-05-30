@@ -13,6 +13,11 @@ class PostTarget extends Model
         'social_platform_id',
         'status',
         'platform_post_id',
+        'likes_count',
+        'comments_count',
+        'shares_count',
+        'reactions_count',
+        'stats_synced_at',
         'published_at',
         'error_message',
     ];
@@ -21,6 +26,11 @@ class PostTarget extends Model
     {
         return [
             'published_at' => 'datetime',
+            'stats_synced_at' => 'datetime',
+            'likes_count' => 'integer',
+            'comments_count' => 'integer',
+            'shares_count' => 'integer',
+            'reactions_count' => 'integer',
         ];
     }
 

@@ -37,6 +37,10 @@ Route::middleware(['auth', 'workspace.context'])->group(function (): void {
     Route::get('create', [CreatePostController::class, 'index'])->name('create');
     Route::get('posts', [PostsController::class, 'index'])->name('posts.index');
     Route::get('social-posts', [SocialPostsController::class, 'index'])->name('social-posts.index');
+    Route::post('social-posts/refresh-stats', [SocialPostsController::class, 'refreshStats'])->name('social-posts.refresh-stats');
+    Route::get('social-posts/targets/{target}/comments', [SocialPostsController::class, 'comments'])
+        ->whereNumber('target')
+        ->name('social-posts.comments');
     Route::get('scheduled', [PostsController::class, 'scheduled'])->name('posts.scheduled');
     Route::get('posts/{post}/edit', [\App\Http\Controllers\EditPostController::class, 'show'])->name('posts.edit');
     Route::get('scheduled/{post}/edit', [PostsController::class, 'editScheduled'])->name('posts.scheduled.edit');
