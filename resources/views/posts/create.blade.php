@@ -378,7 +378,7 @@
                     });
 
                     if (mode === 'schedule' && this.scheduledAt) {
-                        form.append('scheduled_at', new Date(this.scheduledAt).toISOString());
+                        form.append('scheduled_at', this.scheduledAt);
                     }
                     if (this.mediaFile) {
                         form.append('media', this.mediaFile, this.mediaName || this.mediaFile.name);

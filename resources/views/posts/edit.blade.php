@@ -330,7 +330,7 @@ function editPostForm(config, platformList) {
             }
 
             if (action === 'reschedule' && this.scheduledAt) {
-                form.append('scheduled_at', new Date(this.scheduledAt).toISOString());
+                form.append('scheduled_at', this.scheduledAt);
             }
 
             if (this.mediaState === 'removed') {

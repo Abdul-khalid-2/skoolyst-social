@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Post;
 use App\Models\Workspace;
-use Carbon\Carbon;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
@@ -151,7 +151,7 @@ class StorePostRequest extends FormRequest
                 $v->errors()->add('scheduled_at', __('Please choose a date and time in the future to schedule.'));
             }
 
-            if ($mode === 'schedule' && $this->filled('scheduled_at') && ! Carbon::parse($this->input('scheduled_at'))->isFuture()) {
+            if ($mode === 'schedule' && $this->filled('scheduled_at') && ! Post::parseScheduledInput((string) $this->input('scheduled_at'))->isFuture()) {
                 $v->errors()->add('scheduled_at', __('The scheduled time must be in the future.'));
             }
 

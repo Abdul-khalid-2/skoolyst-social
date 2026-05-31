@@ -23,9 +23,10 @@
         if (! $at instanceof Carbon) {
             return ['date' => '—', 'time' => ''];
         }
+        $at = $at->copy();
         $d = $at->copy()->startOfDay();
-        $today = Carbon::today();
-        $tomorrow = Carbon::tomorrow();
+        $today = Carbon::today(config('app.timezone'));
+        $tomorrow = Carbon::tomorrow(config('app.timezone'));
         if ($d->equalTo($today)) {
             $dateLabel = 'Today';
         } elseif ($d->equalTo($tomorrow)) {

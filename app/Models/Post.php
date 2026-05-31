@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -33,11 +35,41 @@ class Post extends Model
     protected function casts(): array
     {
         return [
-            'scheduled_at' => 'datetime',
-            'published_at' => 'datetime',
             'ai_generated' => 'boolean',
             'platforms' => 'array',
         ];
+    }
+
+    /**
+     * DB stores UTC; expose app-local time on read, persist UTC on write.
+     */
+    protected function scheduledAt(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value) => $value === null
+                ? null
+                : Carbon::parse($value, 'UTC')->timezone(config('app.timezone')),
+            set: fn ($value) => $value === null
+                ? null
+                : Carbon::parse($value)->utc()->format('Y-m-d H:i:s'),
+        );
+    }
+
+    protected function publishedAt(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value) => $value === null
+                ? null
+                : Carbon::parse($value, 'UTC')->timezone(config('app.timezone')),
+            set: fn ($value) => $value === null
+                ? null
+                : Carbon::parse($value)->utc()->format('Y-m-d H:i:s'),
+        );
+    }
+
+    public static function parseScheduledInput(string $value): Carbon
+    {
+        return Carbon::parse($value, config('app.timezone'));
     }
 
     public function workspace(): BelongsTo

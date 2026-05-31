@@ -71,7 +71,7 @@ class PostsController extends Controller
         ]);
 
         $post->caption      = $validated['caption'];
-        $post->scheduled_at = \Carbon\Carbon::parse($validated['scheduled_at']);
+        $post->scheduled_at = Post::parseScheduledInput($validated['scheduled_at']);
         $post->status       = 'scheduled';
         $post->save();
 

@@ -79,7 +79,7 @@ class PostController extends Controller
 
         $scheduledAt = null;
         if ($mode === 'schedule' && $request->filled('scheduled_at')) {
-            $scheduledAt = Carbon::parse($request->input('scheduled_at'));
+            $scheduledAt = Post::parseScheduledInput((string) $request->input('scheduled_at'));
         }
 
         $tz = (string) ($request->user()?->timezone ?? 'UTC');
@@ -219,7 +219,7 @@ class PostController extends Controller
             }
 
             $post->status = 'scheduled';
-            $post->scheduled_at = Carbon::parse((string) $validated['scheduled_at']);
+            $post->scheduled_at = Post::parseScheduledInput((string) $validated['scheduled_at']);
         }
 
         $post->save();
