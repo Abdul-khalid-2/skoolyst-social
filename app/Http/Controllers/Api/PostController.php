@@ -218,8 +218,13 @@ class PostController extends Controller
                 ]);
             }
 
+            $this->resetTargetsForReschedule($post);
+
             $post->status = 'scheduled';
             $post->scheduled_at = Post::parseScheduledInput((string) $validated['scheduled_at']);
+            $post->fb_error = null;
+            $post->ig_error = null;
+            $post->li_error = null;
         }
 
         $post->save();
@@ -389,6 +394,21 @@ class PostController extends Controller
                 'status' => 'pending',
             ]);
         }
+    }
+
+    /**
+     * Reset non-published targets so a rescheduled post can be picked up by the publisher.
+     */
+    private function resetTargetsForReschedule(Post $post): void
+    {
+        $post->postTargets()
+            ->whereIn('status', ['failed', 'skipped', 'publishing'])
+            ->update([
+                'status' => 'pending',
+                'error_message' => null,
+                'platform_post_id' => null,
+                'published_at' => null,
+            ]);
     }
 
     /**

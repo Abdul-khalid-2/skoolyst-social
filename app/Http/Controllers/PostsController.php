@@ -48,14 +48,7 @@ class PostsController extends Controller
             abort(404);
         }
 
-        $post->load(['postMedia', 'postTargets.socialPlatform']);
-
-        return view('posts.scheduled-edit', [
-            'title'       => 'Edit Scheduled Post',
-            'description' => 'Update your scheduled post caption or reschedule.',
-            'post'        => $post,
-            'workspace'   => $workspace,
-        ]);
+        return redirect()->route('posts.edit', ['post' => $post, 'focus' => 'schedule']);
     }
 
     public function updateScheduled(Request $request, Post $post): RedirectResponse

@@ -26,10 +26,13 @@ class EditPostController extends Controller
             abort(403);
         }
 
-        if (! in_array($post->status, ['draft', 'scheduled'], true)) {
+        $reschedulable = ['draft', 'scheduled', 'failed', 'partial'];
+        if (! in_array($post->status, $reschedulable, true)) {
             return redirect()->route('posts.index')
-                ->with('error', 'Only draft or scheduled posts can be edited.');
+                ->with('error', __('Only draft, scheduled, failed, or partially published posts can be edited or rescheduled.'));
         }
+
+        $focusSchedule = $request->query('focus') === 'schedule';
 
         $post->load(['postMedia', 'postTargets.socialPlatform', 'postTargets.socialAccount']);
 
@@ -90,6 +93,7 @@ class EditPostController extends Controller
             'existingTargetAccountIds' => $existingTargetAccountIds,
             'accountsByPlatform'       => $accountsByPlatform,
             'existingMedia'            => $post->postMedia->first(),
+            'focusSchedule'            => $focusSchedule,
         ]);
     }
 }

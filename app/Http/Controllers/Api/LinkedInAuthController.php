@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\InvalidStateException;
@@ -28,7 +29,12 @@ class LinkedInAuthController extends Controller
             'profile',
             'email',
             'w_member_social',
-            'r_member_profileAnalytics',
+        ]);
+
+        Log::info('LinkedIn OAuth redirect started', [
+            'user_id' => Auth::id(),
+            'redirect_uri' => config('services.linkedin.redirect'),
+            'scopes' => $scopes,
         ]);
 
         return Socialite::driver('linkedin-openid')
@@ -40,23 +46,65 @@ class LinkedInAuthController extends Controller
 
     public function handleCallback(Request $request): RedirectResponse
     {
-        $toError = fn (string $code) => redirect()->route('login', ['error' => $code]);
+        Log::info('LinkedIn OAuth callback received', [
+            'user_id' => Auth::id(),
+            'has_code' => $request->filled('code'),
+            'has_error' => $request->filled('error'),
+            'error' => $request->query('error'),
+            'error_description' => $request->query('error_description'),
+        ]);
+
+        if ($request->filled('error')) {
+            $errorCode = (string) $request->query('error');
+            $description = urldecode((string) $request->query('error_description', $errorCode));
+
+            $message = match ($errorCode) {
+                'unauthorized_scope_error' => __('LinkedIn rejected a permission: :detail. Remove analytics scopes from LINKEDIN_OAUTH_SCOPES or request access in the LinkedIn Developer Portal.', [
+                    'detail' => $description,
+                ]),
+                'access_denied' => __('LinkedIn sign-in was cancelled.'),
+                default => __('LinkedIn authorization failed: :detail', ['detail' => $description]),
+            };
+
+            return $this->oauthFailureRedirect('linkedin_oauth_denied', $message, [
+                'linkedin_error' => $errorCode,
+                'linkedin_error_description' => $description,
+            ]);
+        }
 
         try {
             $socialUser = Socialite::driver('linkedin-openid')
                 ->stateless()
                 ->user();
-        } catch (InvalidStateException) {
-            return $toError('linkedin_state_invalid');
-        } catch (Throwable) {
-            return $toError('linkedin_oauth_failed');
+        } catch (InvalidStateException $e) {
+            return $this->oauthFailureRedirect(
+                'linkedin_state_invalid',
+                __('LinkedIn sign-in session expired. Please try again.'),
+                ['exception' => $e->getMessage()]
+            );
+        } catch (Throwable $e) {
+            return $this->oauthFailureRedirect(
+                'linkedin_oauth_failed',
+                __('LinkedIn connection failed. Please try again.'),
+                ['exception' => $e->getMessage()]
+            );
         }
 
         $liId = (string) $socialUser->getId();
         $accessToken = $socialUser->token;
         if ($liId === '' || ! is_string($accessToken) || $accessToken === '') {
-            return $toError('linkedin_incomplete');
+            return $this->oauthFailureRedirect(
+                'linkedin_incomplete',
+                __('LinkedIn did not return a complete profile. Please try again.'),
+                ['linkedin_id' => $liId]
+            );
         }
+
+        Log::info('LinkedIn OAuth token exchange succeeded', [
+            'user_id' => Auth::id(),
+            'linkedin_id' => $liId,
+            'expires_in' => $socialUser->expiresIn,
+        ]);
 
         $name = $socialUser->getName() ?: 'LinkedIn User';
         $email = $socialUser->getEmail();
@@ -87,7 +135,7 @@ class LinkedInAuthController extends Controller
 
             $workspace = $user->workspaces()->wherePivot('is_active', true)->first();
             if ($workspace) {
-                $decryptedAccessToken  = $user->linkedin_access_token;
+                $decryptedAccessToken = $user->linkedin_access_token;
                 $decryptedRefreshToken = $user->linkedin_refresh_token;
 
                 $vanityName = SocialAccountProvisioner::fetchLinkedInVanityName($decryptedAccessToken);
@@ -111,7 +159,13 @@ class LinkedInAuthController extends Controller
                 $this->fetchLinkedInOrganizations($workspace, $liId, $decryptedAccessToken, $expiresAt);
             }
 
-            return redirect()->route('dashboard');
+            Log::info('LinkedIn connected for authenticated user', [
+                'user_id' => $user->id,
+                'workspace_id' => $workspace?->id,
+                'linkedin_id' => $liId,
+            ]);
+
+            return redirect()->route('accounts')->with('success', __('LinkedIn connected successfully.'));
         }
 
         // Not authenticated: proceed with existing signup/login flow
@@ -119,14 +173,20 @@ class LinkedInAuthController extends Controller
         if (! $user) {
             $byEmail = User::query()->where('email', $email)->first();
             if ($byEmail && $byEmail->linkedin_id && $byEmail->linkedin_id !== $liId) {
-                return $toError('linkedin_email_conflict');
+                return $this->oauthFailureRedirect(
+                    'linkedin_email_conflict',
+                    __('This LinkedIn account is linked to a different email address.')
+                );
             }
             $user = $byEmail;
         }
 
         if ($user) {
             if ($user->is_active === false) {
-                return $toError('account_disabled');
+                return $this->oauthFailureRedirect(
+                    'account_disabled',
+                    __('Your account is disabled. Contact your administrator.')
+                );
             }
             $user->name = $name;
             if (
@@ -179,6 +239,7 @@ class LinkedInAuthController extends Controller
                 app(PermissionRegistrar::class)->setPermissionsTeamId((int) $workspace->id);
                 Role::findOrCreate('owner', 'web');
                 $user->syncRoles(['owner']);
+
                 return $user;
             });
         }
@@ -211,6 +272,24 @@ class LinkedInAuthController extends Controller
         return redirect()->route('dashboard');
     }
 
+    /**
+     * @param  array<string, mixed>  $context
+     */
+    private function oauthFailureRedirect(string $code, string $message, array $context = []): RedirectResponse
+    {
+        Log::warning('LinkedIn OAuth failed', array_merge([
+            'code' => $code,
+            'message' => $message,
+            'user_id' => Auth::id(),
+        ], $context));
+
+        if (Auth::check()) {
+            return redirect()->route('accounts')->with('error', $message);
+        }
+
+        return redirect()->route('login', ['error' => $code]);
+    }
+
     private function fetchLinkedInOrganizations(Workspace $workspace, string $userUrn, string $accessToken, \Carbon\Carbon $expiresAt): void
     {
         try {
@@ -240,8 +319,6 @@ class LinkedInAuthController extends Controller
                         $avatar = (string) $org['logoV2']['original~']['sourceUrl'];
                     }
 
-                    // followingInfo is already requested in the projection above —
-                    // surface its followerCount so the accounts UI can render it.
                     $followers = null;
                     $followingInfo = $org['followingInfo'] ?? null;
                     if (is_array($followingInfo) && isset($followingInfo['followerCount'])
@@ -264,9 +341,15 @@ class LinkedInAuthController extends Controller
                         $postsCount,
                     );
                 }
+            } else {
+                Log::warning('LinkedIn organizationAcls request failed', [
+                    'workspace_id' => $workspace->id,
+                    'status' => $response->status(),
+                    'body' => $response->json(),
+                ]);
             }
         } catch (Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('Failed to fetch LinkedIn organizations', ['error' => $e->getMessage()]);
+            Log::warning('Failed to fetch LinkedIn organizations', ['error' => $e->getMessage()]);
         }
     }
 

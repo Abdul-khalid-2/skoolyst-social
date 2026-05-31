@@ -114,7 +114,7 @@ return [
             'trim',
             explode(',', (string) env(
                 'LINKEDIN_OAUTH_SCOPES',
-                'openid,profile,email,w_member_social,r_member_profileAnalytics'
+                'openid,profile,email,w_member_social'
             ))
         ))),
     ],

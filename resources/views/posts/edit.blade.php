@@ -1,6 +1,8 @@
 @extends('layouts.app', [
-    'title' => 'Edit Post',
-    'description' => 'Edit your scheduled or draft post.',
+    'title' => ($focusSchedule ?? false) ? 'Reschedule Post' : 'Edit Post',
+    'description' => ($focusSchedule ?? false)
+        ? 'Change schedule time and choose which accounts or pages will receive this post.'
+        : 'Edit your scheduled or draft post.',
     'subtitle' => null,
 ])
 
@@ -17,6 +19,7 @@
         'existingPlatformSlugs'    => $existingPlatformSlugs ?? [],
         'existingCaption'          => $post->caption ?? '',
         'existingScheduledAt'      => $post->scheduled_at ? $post->scheduled_at->format('Y-m-d\TH:i') : '',
+        'focusSchedule'            => (bool) ($focusSchedule ?? false),
         'existingMediaUrl'         => $existingMediaUrl,
         'existingMediaIsVideo'     => $isExistingVideo,
         'postStatus'               => $post->status,
@@ -62,7 +65,7 @@ function editPostForm(config, platformList) {
         modalPlatform: '',
         modalDraftIds: [],
 
-        scheduleMode: config.existingScheduledAt ? 'later' : 'now',
+        scheduleMode: config.focusSchedule ? 'later' : (config.existingScheduledAt ? 'later' : 'now'),
         scheduledAt: config.existingScheduledAt || '',
         minDateTime: '',
         submitting: false,
@@ -400,7 +403,9 @@ function editPostForm(config, platformList) {
         {{-- Header --}}
         <div class="flex items-center justify-between">
             <div>
-                <h1 class="text-lg font-bold text-gray-900">{{ __('Edit Post') }}</h1>
+                <h1 class="text-lg font-bold text-gray-900">
+                    {{ ($focusSchedule ?? false) ? __('Reschedule Post') : __('Edit Post') }}
+                </h1>
                 <p class="text-xs text-gray-500 mt-0.5">
                     {{ __('Workspace:') }} <span class="font-medium text-gray-700">{{ e($workspace->name) }}</span>
                     &nbsp;·&nbsp;

@@ -245,7 +245,7 @@
                                     </td>
                                     <td class="px-4 py-3.5">
                                         <div class="flex items-center justify-end gap-1">
-                                            @if (in_array($post->status, ['draft', 'scheduled']))
+                                            @if ($post->status === 'draft')
                                                 <a
                                                     href="{{ route('posts.edit', $post) }}"
                                                     class="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
@@ -255,6 +255,18 @@
                                                         <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" />
                                                         <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
                                                     </svg>
+                                                </a>
+                                            @endif
+                                            @if (in_array($post->status, ['scheduled', 'failed', 'partial'], true))
+                                                <a
+                                                    href="{{ route('posts.edit', ['post' => $post, 'focus' => 'schedule']) }}"
+                                                    class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
+                                                    title="{{ __('Reschedule post') }}"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                                                    </svg>
+                                                    {{ __('Reschedule') }}
                                                 </a>
                                             @endif
                                             <form
