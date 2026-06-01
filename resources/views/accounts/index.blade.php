@@ -227,6 +227,17 @@
                                         </div>
                                     @endforeach
                                 </div>
+
+                                <div class="mt-4 pt-3 border-t border-gray-100">
+                                    <button
+                                        type="button"
+                                        x-on:click="connectModal = '{{ $platform->slug }}'"
+                                        class="w-full py-2 text-sm font-semibold rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 active:scale-95 transition-all"
+                                    >
+                                        {{ __('Add another account') }}
+                                    </button>
+                                    <p class="text-xs text-gray-400 text-center mt-1.5">{{ __('Authorize another profile or page via OAuth') }}</p>
+                                </div>
                             @else
                                 <div>
                                     <button
@@ -246,7 +257,7 @@
             </div>
 
             @foreach ($rows as $row)
-                @if (! $row->connected)
+                @if (in_array($row->platform->slug, ['facebook', 'instagram', 'linkedin'], true))
                     @php
                         $platform = $row->platform;
                         $g = $accountsHelper->gradientFor($platform);

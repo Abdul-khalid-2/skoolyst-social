@@ -66,6 +66,10 @@ class AccountListingService
             ->orderBy('id')
             ->with(['socialAccounts' => function ($q) use ($workspace): void {
                 $q->where('workspace_id', $workspace->id)
+                    ->where(function ($inner): void {
+                        $inner->whereNull('platform_account_id')
+                            ->orWhere('platform_account_id', 'not like', 'selection-pending:%');
+                    })
                     ->orderBy('id')
                     ->with('platform');
             }])

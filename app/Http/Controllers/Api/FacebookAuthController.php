@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\SocialAccountProvisioner;
+use App\Support\AvatarUrl;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -82,7 +83,7 @@ class FacebookAuthController extends Controller
             ? now()->addSeconds((int) $longLived['expires_in'])
             : null;
 
-        $avatar = $socialUser->getAvatar();
+        $avatar = AvatarUrl::forStorage($socialUser->getAvatar());
 
         // ── If the user is already logged in, attach Facebook to their account ──
         if (Auth::check()) {
@@ -96,7 +97,7 @@ class FacebookAuthController extends Controller
             $user->facebook_id               = $fbId;
             $user->facebook_access_token     = $accessToken;
             $user->facebook_token_expires_at = $expiresAt;
-            if ($avatar) {
+            if ($avatar !== null) {
                 $user->avatar = $avatar;
             }
             $user->save();
@@ -107,17 +108,26 @@ class FacebookAuthController extends Controller
                 ->first();
 
             if ($workspace) {
-                $connectedPages = SocialAccountProvisioner::connectFacebookPagesForWorkspace(
+                $stats = SocialAccountProvisioner::connectFacebookPagesForWorkspace(
                     $workspace, $fbId, $accessToken, $expiresAt
                 );
-                if ($connectedPages < 1) {
-                    SocialAccountProvisioner::connectFacebookOnlyForWorkspace(
+                if ($stats['connected'] < 1) {
+                    $fallback = SocialAccountProvisioner::connectFacebookOnlyForWorkspace(
                         $workspace, $fbId, $accessToken, $expiresAt, $user->name
                     );
+                    $stats = [
+                        'connected' => $fallback['connected'],
+                        'created' => $fallback['created'],
+                        'updated' => $fallback['updated'],
+                    ];
                 }
+
+                [$flashType, $flashMessage] = $this->facebookConnectFlashMessage($stats);
+
+                return redirect()->route('accounts')->with($flashType, $flashMessage);
             }
 
-            return redirect()->route('dashboard');
+            return redirect()->route('accounts');
         }
         // ─────────────────────────────────────────────────────────────────────
 
@@ -151,7 +161,7 @@ class FacebookAuthController extends Controller
             $user->facebook_id               = $fbId;
             $user->facebook_access_token     = $accessToken;
             $user->facebook_token_expires_at = $expiresAt;
-            if ($avatar) {
+            if ($avatar !== null) {
                 $user->avatar = $avatar;
             }
             $user->save();
@@ -222,8 +232,8 @@ class FacebookAuthController extends Controller
         }
 
         if ($workspace) {
-            $connectedPages = SocialAccountProvisioner::connectFacebookPagesForWorkspace($workspace, $fbId, $accessToken, $expiresAt);
-            if ($connectedPages < 1) {
+            $stats = SocialAccountProvisioner::connectFacebookPagesForWorkspace($workspace, $fbId, $accessToken, $expiresAt);
+            if ($stats['connected'] < 1) {
                 SocialAccountProvisioner::connectFacebookOnlyForWorkspace(
                     $workspace,
                     $fbId,
@@ -242,6 +252,27 @@ class FacebookAuthController extends Controller
         $request->session()->put('current_workspace_id', (int) $workspace->id);
 
         return redirect()->intended(route('dashboard'));
+    }
+
+    /**
+     * @param  array{connected: int, created: int, updated: int}  $stats
+     * @return array{0: string, 1: string}
+     */
+    private function facebookConnectFlashMessage(array $stats): array
+    {
+        $newCount = (int) ($stats['created'] ?? 0);
+
+        if ($newCount === 0) {
+            return [
+                'info',
+                __('This account is already connected. Access tokens refreshed.'),
+            ];
+        }
+
+        return [
+            'success',
+            __('Facebook connected successfully. :count new account(s) added.', ['count' => $newCount]),
+        ];
     }
 
     /**

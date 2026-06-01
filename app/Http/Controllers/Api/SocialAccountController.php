@@ -7,6 +7,7 @@ use App\Models\SocialAccount;
 use App\Models\SocialPlatform;
 use App\Models\Workspace;
 use App\Services\SocialAccountProvisioner;
+use App\Support\AvatarUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -47,7 +48,7 @@ class SocialAccountController extends Controller
             [
                 'workspace_id' => $workspace->id,
                 'social_platform_id' => (int) $data['platform_id'],
-                'platform_page_id' => $data['page_id'] ?? null,
+                'platform_account_id' => SocialAccount::platformAccountIdFor($data['page_id'] ?? null, null),
             ],
             [
                 'account_name' => $data['account_name'],
@@ -100,20 +101,21 @@ class SocialAccountController extends Controller
         $accounts = $workspace->socialAccounts()
             ->with('platform')
             ->get()
-            ->keyBy('social_platform_id');
+            ->groupBy('social_platform_id');
 
         $rows = SocialPlatform::query()
             ->where('is_active', true)
             ->orderBy('id')
             ->get()
             ->map(function (SocialPlatform $platform) use ($accounts) {
-                /** @var SocialAccount|null $account */
-                $account = $accounts->get($platform->id);
+                /** @var \Illuminate\Support\Collection<int, SocialAccount> $platformAccounts */
+                $platformAccounts = $accounts->get($platform->id, collect());
+                $primary = $platformAccounts->first(fn (SocialAccount $a) => $a->is_connected) ?? $platformAccounts->first();
                 $status = 'disconnected';
-                if ($account?->is_connected) {
-                    if ($account->token_expires_at && $account->token_expires_at->isPast()) {
+                if ($primary?->is_connected) {
+                    if ($primary->token_expires_at && $primary->token_expires_at->isPast()) {
                         $status = 'expired';
-                    } elseif (! $account->is_active) {
+                    } elseif (! $primary->is_active) {
                         $status = 'paused';
                     } else {
                         $status = 'connected';
@@ -127,18 +129,23 @@ class SocialAccountController extends Controller
                     'icon' => $platform->icon,
                     'color' => $platform->color,
                     'connection_options' => $platform->connection_options ?? [],
-                    'connected' => $account?->is_connected ?? false,
-                    'selected' => $account !== null,
+                    'connected' => $platformAccounts->contains(fn (SocialAccount $a) => $a->is_connected),
+                    'selected' => $platformAccounts->isNotEmpty(),
                     'status' => $status,
-                    'account_id' => $account?->id,
-                    'account_name' => $account?->account_name,
-                    'account_handle' => $account?->account_handle,
-                    'is_active' => (bool) ($account?->is_active ?? true),
-                    'followers_count' => (int) ($account?->followers_count ?? 0),
-                    'fan_count' => (int) ($account?->fan_count ?? 0),
-                    'following_count' => (int) ($account?->following_count ?? 0),
-                    'posts_count' => (int) ($account?->posts_count ?? 0),
-                    'token_expires_at' => $account?->token_expires_at?->toIso8601String(),
+                    'account_id' => $primary?->id,
+                    'account_name' => $primary?->account_name,
+                    'account_handle' => $primary?->account_handle,
+                    'is_active' => (bool) ($primary?->is_active ?? true),
+                    'followers_count' => (int) ($primary?->followers_count ?? 0),
+                    'fan_count' => (int) ($primary?->fan_count ?? 0),
+                    'following_count' => (int) ($primary?->following_count ?? 0),
+                    'posts_count' => (int) ($primary?->posts_count ?? 0),
+                    'token_expires_at' => $primary?->token_expires_at?->toIso8601String(),
+                    'accounts' => $platformAccounts
+                        ->map(fn (SocialAccount $account) => $this->formatAccount($account))
+                        ->values()
+                        ->all(),
+                    'connected_count' => $platformAccounts->filter(fn (SocialAccount $a) => $a->is_connected)->count(),
                 ];
             })
             ->values();
@@ -174,14 +181,14 @@ class SocialAccountController extends Controller
         $selectedPlatformIds = $platforms->pluck('id')->all();
         $existing = SocialAccount::query()
             ->where('workspace_id', $workspace->id)
-            ->get()
-            ->keyBy('social_platform_id');
+            ->get();
 
         foreach ($platforms as $platform) {
             SocialAccount::query()->firstOrCreate(
                 [
                     'workspace_id' => $workspace->id,
                     'social_platform_id' => $platform->id,
+                    'platform_account_id' => 'selection-pending:'.$platform->id,
                 ],
                 [
                     'account_name' => $platform->name.' (not connected)',
@@ -192,7 +199,9 @@ class SocialAccountController extends Controller
         }
 
         $removable = $existing
-            ->filter(fn (SocialAccount $account) => ! in_array($account->social_platform_id, $selectedPlatformIds, true) && ! $account->is_connected);
+            ->filter(fn (SocialAccount $account) => ! in_array($account->social_platform_id, $selectedPlatformIds, true)
+                && ! $account->is_connected
+                && str_starts_with((string) $account->platform_account_id, 'selection-pending:'));
         foreach ($removable as $account) {
             $account->delete();
         }
@@ -297,9 +306,10 @@ class SocialAccountController extends Controller
             [
                 'workspace_id' => $workspace->id,
                 'social_platform_id' => $platform->id,
-                'platform_page_id' => $pageId,
+                'platform_account_id' => SocialAccount::platformAccountIdFor($pageId, (string) ($user?->facebook_id ?? '')),
             ],
             [
+                'platform_page_id' => $pageId,
                 'platform_user_id' => (string) ($user?->facebook_id ?? ''),
                 'account_name' => (string) ($selectedPage['name'] ?? 'Facebook Page'),
                 'account_handle' => $pageId,
@@ -347,21 +357,30 @@ class SocialAccountController extends Controller
             return response()->json(['message' => 'Social platform not found.'], 404);
         }
 
-        SocialAccount::query()
+        $data = $request->validate([
+            'account_id' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $account = SocialAccount::query()
             ->where('workspace_id', $workspace->id)
             ->where('social_platform_id', $platform->id)
-            ->delete();
+            ->where('id', (int) $data['account_id'])
+            ->first();
 
-        return response()->json(['message' => "{$platform->name} disconnected successfully."]);
+        if (! $account) {
+            return response()->json(['message' => 'Social account not found for this platform.'], 404);
+        }
+
+        $this->authorize('disconnect', $account);
+        $accountName = $account->account_name;
+        $account->delete();
+
+        return response()->json(['message' => "{$accountName} disconnected successfully."]);
     }
 
     private function shortUrl(mixed $url): ?string
     {
-        if (! is_string($url) || $url === '') {
-            return null;
-        }
-
-        return strlen($url) <= 255 ? $url : null;
+        return AvatarUrl::forStorage($url);
     }
 
     private function assertAccountInWorkspace(Workspace $workspace, SocialAccount $account): void
@@ -384,6 +403,7 @@ class SocialAccountController extends Controller
             'platform_id' => $account->social_platform_id,
             'platform_slug' => $account->platform?->slug,
             'platform_name' => $account->platform?->name,
+            'platform_account_id' => $account->platform_account_id,
             'account_name' => $account->account_name,
             'page_id' => $account->platform_page_id,
             'status' => $status,

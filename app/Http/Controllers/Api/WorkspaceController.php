@@ -56,15 +56,16 @@ class WorkspaceController extends Controller
         $accounts = $workspace->socialAccounts()
             ->with('platform')
             ->get()
-            ->keyBy('social_platform_id');
+            ->groupBy('social_platform_id');
 
         $rows = SocialPlatform::query()
             ->where('is_active', true)
             ->orderBy('id')
             ->get()
             ->map(function (SocialPlatform $platform) use ($accounts) {
-                /** @var SocialAccount|null $account */
-                $account = $accounts->get($platform->id);
+                /** @var \Illuminate\Support\Collection<int, SocialAccount> $platformAccounts */
+                $platformAccounts = $accounts->get($platform->id, collect());
+                $primary = $platformAccounts->first(fn (SocialAccount $a) => $a->is_connected) ?? $platformAccounts->first();
 
                 return [
                     'id' => $platform->id,
@@ -74,12 +75,20 @@ class WorkspaceController extends Controller
                     'character_limit' => $platform->character_limit,
                     'supports_scheduling' => (bool) $platform->supports_scheduling,
                     'supports_media' => (bool) $platform->supports_media,
-                    'connected' => (bool) ($account?->is_connected ?? false),
-                    'account_name' => $account?->account_name,
-                    'account_handle' => $account?->account_handle,
-                    'followers_count' => (int) ($account?->followers_count ?? 0),
-                    'following_count' => (int) ($account?->following_count ?? 0),
-                    'posts_count' => (int) ($account?->posts_count ?? 0),
+                    'connected' => $platformAccounts->contains(fn (SocialAccount $a) => $a->is_connected),
+                    'connected_count' => $platformAccounts->filter(fn (SocialAccount $a) => $a->is_connected)->count(),
+                    'account_name' => $primary?->account_name,
+                    'account_handle' => $primary?->account_handle,
+                    'followers_count' => (int) ($primary?->followers_count ?? 0),
+                    'following_count' => (int) ($primary?->following_count ?? 0),
+                    'posts_count' => (int) ($primary?->posts_count ?? 0),
+                    'accounts' => $platformAccounts->map(fn (SocialAccount $a) => [
+                        'id' => $a->id,
+                        'account_name' => $a->account_name,
+                        'account_handle' => $a->account_handle,
+                        'platform_account_id' => $a->platform_account_id,
+                        'connected' => (bool) $a->is_connected,
+                    ])->values()->all(),
                 ];
             })
             ->values();
@@ -106,21 +115,22 @@ class WorkspaceController extends Controller
             ], 422);
         }
 
-        $account = SocialAccount::query()->updateOrCreate(
-            [
-                'workspace_id' => $workspace->id,
-                'social_platform_id' => $platform->id,
-            ],
+        $result = SocialAccountProvisioner::upsertWorkspaceAccount(
+            $workspace,
+            (int) $platform->id,
+            SocialAccount::platformAccountIdFor(null, (string) $user->facebook_id),
             [
                 'platform_user_id' => (string) $user->facebook_id,
+                'platform_page_id' => null,
                 'account_name' => $user->name ?: 'Facebook',
                 'account_handle' => $user->email,
                 'avatar' => $user->avatar,
-                'access_token' => (string) $user->facebook_access_token,
+                'access_token' => encrypt((string) $user->facebook_access_token),
                 'token_expires_at' => $user->facebook_token_expires_at,
                 'is_connected' => true,
             ],
         );
+        $account = $result['account'];
 
         return response()->json([
             'message' => __(':platform connected successfully.', ['platform' => $platform->name]),
@@ -138,24 +148,24 @@ class WorkspaceController extends Controller
     {
         $this->authorize('disconnect', [SocialAccount::class, $workspace]);
 
+        $data = $request->validate([
+            'account_id' => ['required', 'integer', 'min:1'],
+        ]);
+
         $account = SocialAccount::query()
             ->where('workspace_id', $workspace->id)
             ->where('social_platform_id', $platform->id)
+            ->where('id', (int) $data['account_id'])
             ->first();
 
-        if ($account) {
-            $account->update([
-                'is_connected' => false,
-                'access_token' => 'oauth-pending',
-                'account_handle' => null,
-                'followers_count' => 0,
-                'following_count' => 0,
-                'posts_count' => 0,
-            ]);
+        if (! $account) {
+            return response()->json(['message' => __('Social account not found for this platform.')], 404);
         }
 
+        $account->delete();
+
         return response()->json([
-            'message' => __(':platform disconnected successfully.', ['platform' => $platform->name]),
+            'message' => __(':name disconnected successfully.', ['name' => $account->account_name]),
         ]);
     }
 

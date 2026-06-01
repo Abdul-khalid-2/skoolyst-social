@@ -11,6 +11,7 @@ class SocialAccount extends Model
     protected $fillable = [
         'workspace_id',
         'social_platform_id',
+        'platform_account_id',
         'platform_page_id',
         'platform_user_id',
         'account_name',
@@ -59,5 +60,23 @@ class SocialAccount extends Model
     public function postTargets(): HasMany
     {
         return $this->hasMany(PostTarget::class);
+    }
+
+    /**
+     * Canonical native ID used to dedupe accounts within a workspace + platform.
+     */
+    public static function platformAccountIdFor(?string $pageId, ?string $userId): string
+    {
+        $pageId = trim((string) $pageId);
+        if ($pageId !== '') {
+            return $pageId;
+        }
+
+        $userId = trim((string) $userId);
+        if ($userId !== '') {
+            return 'member:'.$userId;
+        }
+
+        throw new \InvalidArgumentException('A platform page id or user id is required to identify a social account.');
     }
 }

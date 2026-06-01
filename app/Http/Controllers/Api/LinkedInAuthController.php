@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\SocialAccountProvisioner;
+use App\Support\AvatarUrl;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -117,7 +118,7 @@ class LinkedInAuthController extends Controller
             ? now()->addSeconds((int) $socialUser->expiresIn)
             : now()->addDays(60);
 
-        $avatar = $socialUser->getAvatar();
+        $avatar = AvatarUrl::forStorage($socialUser->getAvatar());
         $refreshToken = $socialUser->refreshToken;
 
         // If user is already authenticated, attach LinkedIn to their account and connect
@@ -128,7 +129,7 @@ class LinkedInAuthController extends Controller
             $user->linkedin_access_token = $accessToken;
             $user->linkedin_refresh_token = $refreshToken ?: null;
             $user->linkedin_token_expires_at = $expiresAt;
-            if ($avatar) {
+            if ($avatar !== null) {
                 $user->avatar = $avatar;
             }
             $user->save();
@@ -141,7 +142,7 @@ class LinkedInAuthController extends Controller
                 $vanityName = SocialAccountProvisioner::fetchLinkedInVanityName($decryptedAccessToken);
                 $stats = SocialAccountProvisioner::fetchLinkedInPersonStats($decryptedAccessToken, $liId);
 
-                SocialAccountProvisioner::connectLinkedInForWorkspace(
+                $personal = SocialAccountProvisioner::connectLinkedInForWorkspace(
                     $workspace,
                     $liId,
                     $decryptedAccessToken,
@@ -156,7 +157,8 @@ class LinkedInAuthController extends Controller
                     $stats['posts'] ?? null,
                 );
 
-                $this->fetchLinkedInOrganizations($workspace, $liId, $decryptedAccessToken, $expiresAt);
+                $orgStats = $this->fetchLinkedInOrganizations($workspace, $liId, $decryptedAccessToken, $expiresAt);
+                [$flashType, $flashMessage] = $this->linkedInConnectFlashMessage($personal, $orgStats);
             }
 
             Log::info('LinkedIn connected for authenticated user', [
@@ -165,7 +167,7 @@ class LinkedInAuthController extends Controller
                 'linkedin_id' => $liId,
             ]);
 
-            return redirect()->route('accounts')->with('success', __('LinkedIn connected successfully.'));
+            return redirect()->route('accounts')->with($flashType ?? 'success', $flashMessage ?? __('LinkedIn connected successfully.'));
         }
 
         // Not authenticated: proceed with existing signup/login flow
@@ -205,7 +207,7 @@ class LinkedInAuthController extends Controller
             $user->linkedin_access_token = $accessToken;
             $user->linkedin_refresh_token = $refreshToken ?: null;
             $user->linkedin_token_expires_at = $expiresAt;
-            if ($avatar) {
+            if ($avatar !== null) {
                 $user->avatar = $avatar;
             }
             $user->save();
@@ -290,8 +292,14 @@ class LinkedInAuthController extends Controller
         return redirect()->route('login', ['error' => $code]);
     }
 
-    private function fetchLinkedInOrganizations(Workspace $workspace, string $userUrn, string $accessToken, \Carbon\Carbon $expiresAt): void
+    /**
+     * @return array{created: int, updated: int}
+     */
+    private function fetchLinkedInOrganizations(Workspace $workspace, string $userUrn, string $accessToken, \Carbon\Carbon $expiresAt): array
     {
+        $created = 0;
+        $updated = 0;
+
         try {
             $response = Http::timeout(30)
                 ->withHeaders([
@@ -328,7 +336,7 @@ class LinkedInAuthController extends Controller
 
                     $postsCount = SocialAccountProvisioner::fetchLinkedInOrganizationPostsCount($orgId, $accessToken);
 
-                    SocialAccountProvisioner::connectLinkedInOrganizationForWorkspace(
+                    $result = SocialAccountProvisioner::connectLinkedInOrganizationForWorkspace(
                         $workspace,
                         $userUrn,
                         $orgId,
@@ -340,6 +348,12 @@ class LinkedInAuthController extends Controller
                         $followers,
                         $postsCount,
                     );
+
+                    if ($result['created']) {
+                        $created++;
+                    } else {
+                        $updated++;
+                    }
                 }
             } else {
                 Log::warning('LinkedIn organizationAcls request failed', [
@@ -351,6 +365,30 @@ class LinkedInAuthController extends Controller
         } catch (Throwable $e) {
             Log::warning('Failed to fetch LinkedIn organizations', ['error' => $e->getMessage()]);
         }
+
+        return ['created' => $created, 'updated' => $updated];
+    }
+
+    /**
+     * @param  array{account: \App\Models\SocialAccount, created: bool}  $personal
+     * @param  array{created: int, updated: int}  $orgs
+     * @return array{0: string, 1: string}
+     */
+    private function linkedInConnectFlashMessage(array $personal, array $orgs): array
+    {
+        $newCount = ($personal['created'] ? 1 : 0) + ($orgs['created'] ?? 0);
+
+        if ($newCount === 0) {
+            return [
+                'info',
+                __('This LinkedIn account is already connected. Access tokens refreshed.'),
+            ];
+        }
+
+        return [
+            'success',
+            __('LinkedIn connected successfully. :count new account(s) added.', ['count' => $newCount]),
+        ];
     }
 
     private function makeWorkspaceSlug(int $userId, string $workspaceName): string

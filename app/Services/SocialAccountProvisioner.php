@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\SocialAccount;
 use App\Models\SocialPlatform;
 use App\Models\Workspace;
+use App\Support\AvatarUrl;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -14,65 +15,114 @@ class SocialAccountProvisioner
 {
     private const FACEBOOK_PAGE_FIELDS = 'id,name,access_token,fan_count,followers_count,posts.limit(0).summary(true),picture,instagram_business_account{id,username,profile_picture_url,name,followers_count,follows_count,media_count}';
 
+    /**
+     * @return array{account: SocialAccount, created: bool}
+     */
+    public static function upsertWorkspaceAccount(
+        Workspace $workspace,
+        int $socialPlatformId,
+        string $platformAccountId,
+        array $attributes
+    ): array {
+        $platformAccountId = trim($platformAccountId);
+        if ($platformAccountId === '') {
+            throw new \InvalidArgumentException('platform_account_id cannot be empty.');
+        }
+
+        $existing = SocialAccount::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('social_platform_id', $socialPlatformId)
+            ->where('platform_account_id', $platformAccountId)
+            ->first();
+
+        $account = SocialAccount::query()->updateOrCreate(
+            [
+                'workspace_id' => $workspace->id,
+                'social_platform_id' => $socialPlatformId,
+                'platform_account_id' => $platformAccountId,
+            ],
+            $attributes
+        );
+
+        return [
+            'account' => $account,
+            'created' => $existing === null,
+        ];
+    }
+
     public static function ensureForWorkspace(Workspace $workspace): void
     {
         // Compatibility no-op: workspace routes call this hook before listing/connecting.
         // Facebook pages are provisioned during OAuth callback.
     }
 
+    /**
+     * @return array{connected: int, created: int, updated: int}
+     */
     public static function connectFacebookOnlyForWorkspace(
         Workspace $workspace,
         string $facebookUserId,
         string $accessToken,
         ?\Illuminate\Support\Carbon $expiresAt = null,
         ?string $accountName = null
-    ): void {
+    ): array {
         $facebook = SocialPlatform::query()
             ->where('slug', 'facebook')
             ->where('is_active', true)
             ->first();
 
         if (! $facebook) {
-            return;
+            return ['connected' => 0, 'created' => 0, 'updated' => 0];
         }
 
-        SocialAccount::query()->updateOrCreate(
-            [
-                'workspace_id' => $workspace->id,
-                'social_platform_id' => $facebook->id,
-            ],
+        $result = self::upsertWorkspaceAccount(
+            $workspace,
+            (int) $facebook->id,
+            SocialAccount::platformAccountIdFor(null, $facebookUserId),
             [
                 'platform_user_id' => $facebookUserId,
+                'platform_page_id' => null,
                 'account_name' => $accountName ?: 'Facebook',
                 'access_token' => encrypt($accessToken),
                 'token_expires_at' => $expiresAt,
                 'is_connected' => true,
             ],
         );
+
+        return [
+            'connected' => 1,
+            'created' => $result['created'] ? 1 : 0,
+            'updated' => $result['created'] ? 0 : 1,
+        ];
     }
 
+    /**
+     * @return array{connected: int, created: int, updated: int}
+     */
     public static function connectFacebookPagesForWorkspace(
         Workspace $workspace,
         string $facebookUserId,
         string $userAccessToken,
         ?\Illuminate\Support\Carbon $expiresAt = null
-    ): int {
+    ): array {
         $facebook = SocialPlatform::query()
             ->where('slug', 'facebook')
             ->where('is_active', true)
             ->first();
 
         if (! $facebook) {
-            return 0;
+            return ['connected' => 0, 'created' => 0, 'updated' => 0];
         }
 
         $graphVersion = (string) config('services.facebook.graph_version', 'v24.0');
         $pagesById = self::fetchPagesForUser($graphVersion, $userAccessToken);
         if ($pagesById === []) {
-            return 0;
+            return ['connected' => 0, 'created' => 0, 'updated' => 0];
         }
 
         $connected = 0;
+        $created = 0;
+        $updated = 0;
         foreach ($pagesById as $page) {
             if (! is_array($page)) {
                 continue;
@@ -93,13 +143,12 @@ class SocialAccountProvisioner
             $postsCount     = self::fetchFacebookPagePostsCount($graphVersion, $pageId, $pageToken)
                 ?? self::fetchPagePostsCount($page);
 
-            SocialAccount::query()->updateOrCreate(
+            $pageResult = self::upsertWorkspaceAccount(
+                $workspace,
+                (int) $facebook->id,
+                SocialAccount::platformAccountIdFor($pageId, null),
                 [
-                    'workspace_id' => $workspace->id,
-                    'social_platform_id' => $facebook->id,
                     'platform_page_id' => $pageId,
-                ],
-                [
                     'platform_user_id' => $facebookUserId,
                     'account_name' => (string) ($page['name'] ?? 'Facebook Page'),
                     'account_handle' => $pageId,
@@ -114,6 +163,12 @@ class SocialAccountProvisioner
                     'is_connected' => true,
                 ],
             );
+
+            if ($pageResult['created']) {
+                $created++;
+            } else {
+                $updated++;
+            }
 
             $igNode = $page['instagram_business_account'] ?? null;
             if (is_array($igNode) && isset($igNode['id'])) {
@@ -130,7 +185,11 @@ class SocialAccountProvisioner
             $connected++;
         }
 
-        return $connected;
+        return [
+            'connected' => $connected,
+            'created' => $created,
+            'updated' => $updated,
+        ];
     }
 
     /**
@@ -442,11 +501,7 @@ class SocialAccountProvisioner
 
     private static function shortUrl(mixed $url): ?string
     {
-        if (! is_string($url) || $url === '') {
-            return null;
-        }
-
-        return strlen($url) <= 255 ? $url : null;
+        return AvatarUrl::forStorage($url);
     }
 
     /**
@@ -485,13 +540,12 @@ class SocialAccountProvisioner
             ? (int) $instagramBusinessAccount['media_count']
             : null;
 
-        SocialAccount::query()->updateOrCreate(
+        self::upsertWorkspaceAccount(
+            $workspace,
+            (int) $instagram->id,
+            SocialAccount::platformAccountIdFor($igId, null),
             [
-                'workspace_id' => $workspace->id,
-                'social_platform_id' => $instagram->id,
                 'platform_page_id' => $igId,
-            ],
-            [
                 'platform_user_id' => $facebookUserId,
                 'account_name' => (string) ($instagramBusinessAccount['name'] ?? $instagramBusinessAccount['username'] ?? 'Instagram'),
                 'account_handle' => (string) ($instagramBusinessAccount['username'] ?? $igId),
@@ -509,7 +563,7 @@ class SocialAccountProvisioner
                     'facebook_page_id' => $facebookPageId,
                     'instagram_user_id' => $igId,
                 ],
-            ],
+            ]
         );
     }
 
@@ -532,7 +586,7 @@ class SocialAccountProvisioner
         ?int $followersCount = null,
         ?int $followingCount = null,
         ?int $postsCount = null
-    ): SocialAccount {
+    ): array {
         $linkedin = SocialPlatform::query()
             ->where('slug', 'linkedin')
             ->where('is_active', true)
@@ -544,14 +598,13 @@ class SocialAccountProvisioner
 
         $memberUrn = 'urn:li:person:'.$linkedInUserId;
 
-        return SocialAccount::query()->updateOrCreate(
-            [
-                'workspace_id' => $workspace->id,
-                'social_platform_id' => $linkedin->id,
-                'platform_user_id' => $linkedInUserId,
-            ],
+        $result = self::upsertWorkspaceAccount(
+            $workspace,
+            (int) $linkedin->id,
+            SocialAccount::platformAccountIdFor(null, $linkedInUserId),
             [
                 'platform_page_id' => null,
+                'platform_user_id' => $linkedInUserId,
                 'account_name' => $displayName ?: 'LinkedIn Profile',
                 'account_handle' => self::linkedInPersonHandleForStorage($vanityName, $linkedInUserId),
                 'avatar' => self::shortUrl($avatarUrl),
@@ -572,8 +625,10 @@ class SocialAccountProvisioner
                     'li_vanity_name' => $vanityName,
                     'li_profile_email' => self::normalizeLinkedInProfileEmail($profileEmail),
                 ],
-            ],
+            ]
         );
+
+        return $result;
     }
 
     /**
@@ -653,7 +708,7 @@ class SocialAccountProvisioner
         ?string $avatarUrl = null,
         ?int $followersCount = null,
         ?int $postsCount = null
-    ): SocialAccount {
+    ): array {
         $linkedin = SocialPlatform::query()
             ->where('slug', 'linkedin')
             ->where('is_active', true)
@@ -667,13 +722,12 @@ class SocialAccountProvisioner
 
         $hasAnyStat = $followersCount !== null || $postsCount !== null;
 
-        return SocialAccount::query()->updateOrCreate(
+        return self::upsertWorkspaceAccount(
+            $workspace,
+            (int) $linkedin->id,
+            SocialAccount::platformAccountIdFor($organizationId, null),
             [
-                'workspace_id' => $workspace->id,
-                'social_platform_id' => $linkedin->id,
                 'platform_page_id' => $organizationId,
-            ],
-            [
                 'platform_user_id' => $linkedInUserId,
                 'account_name' => $organizationName ?: 'LinkedIn Organization',
                 'account_handle' => $organizationId,
@@ -683,7 +737,6 @@ class SocialAccountProvisioner
                 'token_expires_at' => $expiresAt,
                 'followers_count' => $followersCount,
                 'fan_count' => null,
-                // Companies don't have a "following" count in the IG/personal sense.
                 'following_count' => null,
                 'posts_count' => $postsCount,
                 'stats_synced_at' => $hasAnyStat ? now() : null,
@@ -693,7 +746,7 @@ class SocialAccountProvisioner
                     'li_account_type' => 'organization',
                     'li_organization_id' => $organizationId,
                 ],
-            ],
+            ]
         );
     }
 

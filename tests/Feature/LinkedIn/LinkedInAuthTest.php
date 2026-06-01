@@ -42,7 +42,7 @@ class LinkedInAuthTest extends TestCase
     {
         $workspace = Workspace::factory()->create();
 
-        $account = SocialAccountProvisioner::connectLinkedInForWorkspace(
+        $result = SocialAccountProvisioner::connectLinkedInForWorkspace(
             $workspace,
             '12345',
             'test_access_token',
@@ -53,7 +53,8 @@ class LinkedInAuthTest extends TestCase
             'johndoe'
         );
 
-        $this->assertNotNull($account);
+        $account = $result['account'];
+        $this->assertTrue($result['created']);
         $this->assertEquals($workspace->id, $account->workspace_id);
         $this->assertEquals('test_access_token', decrypt($account->access_token));
         $this->assertEquals('test_refresh_token', decrypt($account->refresh_token));
@@ -68,7 +69,7 @@ class LinkedInAuthTest extends TestCase
     {
         $workspace = Workspace::factory()->create();
 
-        $account = SocialAccountProvisioner::connectLinkedInOrganizationForWorkspace(
+        $result = SocialAccountProvisioner::connectLinkedInOrganizationForWorkspace(
             $workspace,
             '12345',
             '999888',
@@ -79,7 +80,8 @@ class LinkedInAuthTest extends TestCase
             'https://example.com/company-logo.jpg'
         );
 
-        $this->assertNotNull($account);
+        $account = $result['account'];
+        $this->assertTrue($result['created']);
         $this->assertEquals('My Company', $account->account_name);
         $this->assertTrue($account->is_connected);
 
@@ -93,7 +95,7 @@ class LinkedInAuthTest extends TestCase
     {
         $workspace = Workspace::factory()->create();
 
-        $personal = SocialAccountProvisioner::connectLinkedInForWorkspace(
+        $personalResult = SocialAccountProvisioner::connectLinkedInForWorkspace(
             $workspace,
             '12345',
             'personal_token',
@@ -102,7 +104,7 @@ class LinkedInAuthTest extends TestCase
             'John Doe'
         );
 
-        $organization = SocialAccountProvisioner::connectLinkedInOrganizationForWorkspace(
+        $organizationResult = SocialAccountProvisioner::connectLinkedInOrganizationForWorkspace(
             $workspace,
             '12345',
             '999888',
@@ -111,6 +113,9 @@ class LinkedInAuthTest extends TestCase
             now()->addDays(60),
             'My Company'
         );
+
+        $personal = $personalResult['account'];
+        $organization = $organizationResult['account'];
 
         $accounts = SocialAccount::query()
             ->where('workspace_id', $workspace->id)

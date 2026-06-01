@@ -592,34 +592,6 @@ class PostController extends Controller
         return $this->linkedInPostService->publishTextPost($account, $post->caption);
     }
 
-    private function connectedAccountForPlatform(Workspace $workspace, SocialPlatform $platform): ?SocialAccount
-    {
-        $base = SocialAccount::query()
-            ->where('workspace_id', $workspace->id)
-            ->where('social_platform_id', $platform->id)
-            ->where('is_connected', true);
-
-        if ($platform->slug === 'facebook') {
-            $preferredPageId = (string) env('FB_PAGE_ID', '');
-            if ($preferredPageId !== '') {
-                $preferred = (clone $base)->where('platform_page_id', $preferredPageId)->first();
-                if ($preferred) {
-                    return $preferred;
-                }
-            }
-
-            $pageAccount = (clone $base)
-                ->whereNotNull('platform_page_id')
-                ->latest()
-                ->first();
-            if ($pageAccount) {
-                return $pageAccount;
-            }
-        }
-
-        return $base->latest()->first();
-    }
-
     private function mapMediaType(string $mime, string $fileName): string
     {
         if (str_starts_with($mime, 'video/')) {
