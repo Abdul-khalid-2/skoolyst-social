@@ -114,16 +114,23 @@ class SocialPostsController extends Controller
             return response()->json(['message' => 'Post is not published on this platform.'], 422);
         }
 
-        $result = $this->statsService->fetchComments($postTarget);
+        $shouldRefresh = $request->boolean('refresh')
+            || $postTarget->comments_synced_at === null;
 
-        if (($result['success'] ?? false) !== true) {
-            return response()->json([
-                'message' => $result['error'] ?? 'Could not load comments.',
-            ], 422);
+        if ($shouldRefresh) {
+            $synced = $this->statsService->syncTargetComments($postTarget);
+            if (! $synced && $postTarget->storedComments()->doesntExist()) {
+                return response()->json([
+                    'message' => 'Could not load comments from the platform.',
+                ], 422);
+            }
+
+            $postTarget->refresh();
         }
 
         return response()->json([
-            'comments' => $result['comments'] ?? [],
+            'comments' => $this->statsService->getStoredComments($postTarget),
+            'synced_at' => $postTarget->comments_synced_at?->toIso8601String(),
         ]);
     }
 }

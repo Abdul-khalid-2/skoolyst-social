@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\PostTarget;
+use App\Models\PostTargetComment;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
@@ -85,6 +86,7 @@ class SocialPostStatsService
         }
 
         $this->applyStatsToTarget($target, $result);
+        $this->syncTargetComments($target);
 
         return true;
     }
@@ -147,6 +149,7 @@ class SocialPostStatsService
                 }
 
                 $this->applyStatsToTarget($target, $result);
+                $this->syncTargetComments($target);
                 $synced++;
             }
         }
@@ -156,6 +159,123 @@ class SocialPostStatsService
             'failed' => $failed,
             'errors' => $errors,
         ];
+    }
+
+    /**
+     * @return array<int, array{author: string, text: string, date: string, replies: array<int, array{author: string, text: string, date: string}>}>
+     */
+    public function getStoredComments(PostTarget $target): array
+    {
+        $comments = $target->storedComments()
+            ->with('replies')
+            ->get();
+
+        return $this->formatStoredComments($comments);
+    }
+
+    public function syncTargetComments(PostTarget $target, int $limit = 25): bool
+    {
+        $result = $this->fetchComments($target, $limit);
+
+        if (($result['success'] ?? false) !== true) {
+            return false;
+        }
+
+        $this->persistComments($target, $result['comments'] ?? []);
+        $target->update(['comments_synced_at' => now()]);
+
+        return true;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $comments
+     */
+    private function persistComments(PostTarget $target, array $comments): void
+    {
+        $seenPlatformIds = [];
+
+        foreach ($comments as $row) {
+            $platformId = (string) ($row['platform_comment_id'] ?? '');
+            if ($platformId === '') {
+                continue;
+            }
+
+            $seenPlatformIds[] = $platformId;
+
+            $parent = PostTargetComment::query()->updateOrCreate(
+                [
+                    'post_target_id' => $target->id,
+                    'platform_comment_id' => $platformId,
+                ],
+                [
+                    'parent_id' => null,
+                    'author_name' => (string) ($row['author'] ?? 'Unknown'),
+                    'message' => (string) ($row['text'] ?? ''),
+                    'platform_created_at' => $this->parseCommentTimestamp($row['date'] ?? null),
+                ],
+            );
+
+            foreach ($row['replies'] ?? [] as $reply) {
+                $replyPlatformId = (string) ($reply['platform_comment_id'] ?? '');
+                if ($replyPlatformId === '') {
+                    continue;
+                }
+
+                $seenPlatformIds[] = $replyPlatformId;
+
+                PostTargetComment::query()->updateOrCreate(
+                    [
+                        'post_target_id' => $target->id,
+                        'platform_comment_id' => $replyPlatformId,
+                    ],
+                    [
+                        'parent_id' => $parent->id,
+                        'author_name' => (string) ($reply['author'] ?? 'Unknown'),
+                        'message' => (string) ($reply['text'] ?? ''),
+                        'platform_created_at' => $this->parseCommentTimestamp($reply['date'] ?? null),
+                    ],
+                );
+            }
+        }
+
+        if ($seenPlatformIds !== []) {
+            $target->allStoredComments()
+                ->whereNotIn('platform_comment_id', $seenPlatformIds)
+                ->delete();
+        }
+    }
+
+    /**
+     * @param  Collection<int, PostTargetComment>  $comments
+     * @return array<int, array{author: string, text: string, date: string, replies: array<int, array{author: string, text: string, date: string}>}>
+     */
+    private function formatStoredComments(Collection $comments): array
+    {
+        return $comments->map(function (PostTargetComment $comment) {
+            return [
+                'author' => $comment->author_name,
+                'text' => $comment->message,
+                'date' => $comment->platform_created_at?->format('Y-m-d H:i') ?? '',
+                'replies' => $comment->replies->map(fn (PostTargetComment $reply) => [
+                    'author' => $reply->author_name,
+                    'text' => $reply->message,
+                    'date' => $reply->platform_created_at?->format('Y-m-d H:i') ?? '',
+                ])->values()->all(),
+            ];
+        })->values()->all();
+    }
+
+    private function parseCommentTimestamp(mixed $value): ?\Carbon\Carbon
+    {
+        if (! is_string($value) || $value === '') {
+            return null;
+        }
+
+        try {
+            return \Carbon\Carbon::parse($value);
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /**
@@ -370,7 +490,7 @@ class SocialPostStatsService
         $response = $this->httpClient()->get(
             'https://graph.facebook.com/'.self::META_VERSION.'/'.$postId.'/comments',
             [
-                'fields' => 'from{name},message,created_time,comments.limit(5){from{name},message,created_time}',
+                'fields' => 'id,from{name},message,created_time,comments.limit(5){id,from{name},message,created_time}',
                 'limit' => $limit,
                 'access_token' => $token,
             ]
@@ -389,12 +509,13 @@ class SocialPostStatsService
     }
 
     /**
-     * @return array{author: string, text: string, date: string, replies: array<int, array<string, string>>}
+     * @return array{author: string, text: string, date: string, platform_comment_id: string, replies: array<int, array<string, string>>}
      */
     private function mapFacebookComment(array $row): array
     {
         $replies = collect($row['comments']['data'] ?? [])
             ->map(fn (array $reply) => [
+                'platform_comment_id' => (string) ($reply['id'] ?? ''),
                 'author' => (string) ($reply['from']['name'] ?? 'Unknown'),
                 'text' => (string) ($reply['message'] ?? ''),
                 'date' => $this->formatCommentDate($reply['created_time'] ?? null),
@@ -403,6 +524,7 @@ class SocialPostStatsService
             ->all();
 
         return [
+            'platform_comment_id' => (string) ($row['id'] ?? ''),
             'author' => (string) ($row['from']['name'] ?? 'Unknown'),
             'text' => (string) ($row['message'] ?? ''),
             'date' => $this->formatCommentDate($row['created_time'] ?? null),
@@ -418,7 +540,7 @@ class SocialPostStatsService
         $response = $this->httpClient()->get(
             'https://graph.facebook.com/'.self::META_VERSION.'/'.$mediaId.'/comments',
             [
-                'fields' => 'username,text,timestamp,replies{username,text,timestamp}',
+                'fields' => 'id,username,text,timestamp,replies{id,username,text,timestamp}',
                 'limit' => $limit,
                 'access_token' => $token,
             ]
@@ -437,12 +559,13 @@ class SocialPostStatsService
     }
 
     /**
-     * @return array{author: string, text: string, date: string, replies: array<int, array<string, string>>}
+     * @return array{author: string, text: string, date: string, platform_comment_id: string, replies: array<int, array<string, string>>}
      */
     private function mapInstagramComment(array $row): array
     {
         $replies = collect($row['replies']['data'] ?? [])
             ->map(fn (array $reply) => [
+                'platform_comment_id' => (string) ($reply['id'] ?? ''),
                 'author' => (string) ($reply['username'] ?? 'Unknown'),
                 'text' => (string) ($reply['text'] ?? ''),
                 'date' => $this->formatCommentDate($reply['timestamp'] ?? null),
@@ -451,6 +574,7 @@ class SocialPostStatsService
             ->all();
 
         return [
+            'platform_comment_id' => (string) ($row['id'] ?? ''),
             'author' => (string) ($row['username'] ?? 'Unknown'),
             'text' => (string) ($row['text'] ?? ''),
             'date' => $this->formatCommentDate($row['timestamp'] ?? null),

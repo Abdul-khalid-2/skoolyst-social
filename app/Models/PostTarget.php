@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PostTarget extends Model
 {
@@ -18,6 +19,7 @@ class PostTarget extends Model
         'shares_count',
         'reactions_count',
         'stats_synced_at',
+        'comments_synced_at',
         'published_at',
         'error_message',
     ];
@@ -27,6 +29,7 @@ class PostTarget extends Model
         return [
             'published_at' => 'datetime',
             'stats_synced_at' => 'datetime',
+            'comments_synced_at' => 'datetime',
             'likes_count' => 'integer',
             'comments_count' => 'integer',
             'shares_count' => 'integer',
@@ -47,5 +50,17 @@ class PostTarget extends Model
     public function socialPlatform(): BelongsTo
     {
         return $this->belongsTo(SocialPlatform::class, 'social_platform_id');
+    }
+
+    public function storedComments(): HasMany
+    {
+        return $this->hasMany(PostTargetComment::class)
+            ->whereNull('parent_id')
+            ->orderByDesc('platform_created_at');
+    }
+
+    public function allStoredComments(): HasMany
+    {
+        return $this->hasMany(PostTargetComment::class);
     }
 }
