@@ -121,32 +121,30 @@ class LinkedInAuthController extends Controller
         $avatar = AvatarUrl::forStorage($socialUser->getAvatar());
         $refreshToken = $socialUser->refreshToken;
 
-        // If user is already authenticated, attach LinkedIn to their account and connect
+        // Logged-in user connecting LinkedIn from Accounts (may be a second profile for this workspace).
         if (Auth::check()) {
+            /** @var User $user */
             $user = Auth::user();
 
-            $user->linkedin_id = $liId;
-            $user->linkedin_access_token = $accessToken;
-            $user->linkedin_refresh_token = $refreshToken ?: null;
-            $user->linkedin_token_expires_at = $expiresAt;
-            if ($avatar !== null) {
-                $user->avatar = $avatar;
+            if ($user->is_active === false) {
+                return $this->oauthFailureRedirect(
+                    'account_disabled',
+                    __('Your account is disabled. Contact your administrator.')
+                );
             }
-            $user->save();
+
+            $this->maybeSyncLinkedInIdentityOnUser($user, $liId, $accessToken, $refreshToken, $expiresAt, $avatar);
 
             $workspace = $user->workspaces()->wherePivot('is_active', true)->first();
             if ($workspace) {
-                $decryptedAccessToken = $user->linkedin_access_token;
-                $decryptedRefreshToken = $user->linkedin_refresh_token;
-
-                $vanityName = SocialAccountProvisioner::fetchLinkedInVanityName($decryptedAccessToken);
-                $stats = SocialAccountProvisioner::fetchLinkedInPersonStats($decryptedAccessToken, $liId);
+                $vanityName = SocialAccountProvisioner::fetchLinkedInVanityName($accessToken);
+                $stats = SocialAccountProvisioner::fetchLinkedInPersonStats($accessToken, $liId);
 
                 $personal = SocialAccountProvisioner::connectLinkedInForWorkspace(
                     $workspace,
                     $liId,
-                    $decryptedAccessToken,
-                    $decryptedRefreshToken,
+                    $accessToken,
+                    $refreshToken ?: null,
                     $expiresAt,
                     $name,
                     $avatar,
@@ -157,7 +155,7 @@ class LinkedInAuthController extends Controller
                     $stats['posts'] ?? null,
                 );
 
-                $orgStats = $this->fetchLinkedInOrganizations($workspace, $liId, $decryptedAccessToken, $expiresAt);
+                $orgStats = $this->fetchLinkedInOrganizations($workspace, $liId, $accessToken, $expiresAt);
                 [$flashType, $flashMessage] = $this->linkedInConnectFlashMessage($personal, $orgStats);
             }
 
@@ -272,6 +270,42 @@ class LinkedInAuthController extends Controller
         }
 
         return redirect()->route('dashboard');
+    }
+
+    /**
+     * Attach LinkedIn login credentials to the app user only when it would not violate
+     * users.linkedin_id uniqueness (e.g. adding a second LinkedIn profile to a workspace).
+     */
+    private function maybeSyncLinkedInIdentityOnUser(
+        User $user,
+        string $liId,
+        string $accessToken,
+        ?string $refreshToken,
+        \Illuminate\Support\Carbon $expiresAt,
+        ?string $avatar,
+    ): void {
+        $ownedByOther = User::query()
+            ->where('linkedin_id', $liId)
+            ->where('id', '!=', $user->id)
+            ->exists();
+
+        if ($ownedByOther) {
+            Log::info('LinkedIn OAuth: linked workspace account only; linkedin_id belongs to another app user', [
+                'user_id' => $user->id,
+                'linkedin_id' => $liId,
+            ]);
+
+            return;
+        }
+
+        $user->linkedin_id = $liId;
+        $user->linkedin_access_token = $accessToken;
+        $user->linkedin_refresh_token = $refreshToken ?: null;
+        $user->linkedin_token_expires_at = $expiresAt;
+        if ($avatar !== null) {
+            $user->avatar = $avatar;
+        }
+        $user->save();
     }
 
     /**
