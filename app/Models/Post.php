@@ -28,8 +28,11 @@ class Post extends Model
         'ai_generated',
         'fb_post_id',
         'ig_post_id',
+        'li_post_id',
+        'twitter_post_id',
         'fb_error',
         'ig_error',
+        'li_error',
     ];
 
     protected function casts(): array

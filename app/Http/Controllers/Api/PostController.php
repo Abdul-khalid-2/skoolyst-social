@@ -13,6 +13,7 @@ use App\Models\Workspace;
 use App\Services\InstagramPostService;
 use App\Services\LinkedInPostService;
 use App\Services\SocialPostService;
+use App\Services\XPostService;
 use App\Support\SocialPublishErrorFormatter;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -30,6 +31,7 @@ class PostController extends Controller
         private readonly SocialPostService $socialPostService,
         private readonly InstagramPostService $instagramPostService,
         private readonly LinkedInPostService $linkedInPostService,
+        private readonly XPostService $xPostService,
     ) {}
 
     public function index(Request $request, Workspace $workspace): JsonResponse
@@ -460,7 +462,7 @@ class PostController extends Controller
         foreach ($post->postTargets as $target) {
             $platform = $target->socialPlatform?->slug;
 
-            if (! in_array($platform, ['facebook', 'instagram', 'linkedin'], true)) {
+            if (! in_array($platform, ['facebook', 'instagram', 'linkedin', 'twitter'], true)) {
                 $skipped++;
                 $target->update([
                     'status' => 'skipped',
@@ -565,6 +567,32 @@ class PostController extends Controller
                     'error_message' => $error,
                 ]);
                 $post->li_error = $error;
+
+                continue;
+            }
+
+            if ($platform === 'twitter') {
+                $result = $this->xPostService->publishPost($target->socialAccount, $post, $target);
+
+                if (($result['success'] ?? false) === true) {
+                    $published++;
+                    $target->update([
+                        'status'           => 'published',
+                        'platform_post_id' => $result['post_id'] ?? null,
+                        'published_at'     => now(),
+                        'error_message'    => null,
+                    ]);
+                    $post->twitter_post_id = $result['post_id'] ?? null;
+
+                    continue;
+                }
+
+                $failed++;
+                $error = (string) ($result['error'] ?? 'X publish failed.');
+                $target->update([
+                    'status'        => 'failed',
+                    'error_message' => $error,
+                ]);
 
                 continue;
             }

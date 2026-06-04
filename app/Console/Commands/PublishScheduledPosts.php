@@ -6,6 +6,7 @@ use App\Models\Post;
 use App\Services\InstagramPostService;
 use App\Services\LinkedInPostService;
 use App\Services\SocialPostService;
+use App\Services\XPostService;
 use App\Support\SocialPublishErrorFormatter;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +18,7 @@ class PublishScheduledPosts extends Command
 
     protected $description = 'Publish posts that are scheduled for the current time or earlier.';
 
-    public function handle(SocialPostService $socialPostService, InstagramPostService $instagramPostService, LinkedInPostService $linkedInPostService): int
+    public function handle(SocialPostService $socialPostService, InstagramPostService $instagramPostService, LinkedInPostService $linkedInPostService, XPostService $xPostService): int
     {
         $processed = 0;
 
@@ -53,7 +54,7 @@ class PublishScheduledPosts extends Command
             $this->info("Publishing Post ID: {$post->id}");
 
             try {
-                $this->publishSingleScheduledPost($post, $socialPostService, $instagramPostService, $linkedInPostService);
+                $this->publishSingleScheduledPost($post, $socialPostService, $instagramPostService, $linkedInPostService, $xPostService);
             } catch (Throwable $e) {
                 report($e);
                 $post->refresh();
@@ -75,7 +76,7 @@ class PublishScheduledPosts extends Command
         return self::SUCCESS;
     }
 
-    private function publishSingleScheduledPost(Post $post, SocialPostService $socialPostService, InstagramPostService $instagramPostService, LinkedInPostService $linkedInPostService): void
+    private function publishSingleScheduledPost(Post $post, SocialPostService $socialPostService, InstagramPostService $instagramPostService, LinkedInPostService $linkedInPostService, XPostService $xPostService): void
     {
         $maxExec = (int) config('services.social_publish.max_execution_seconds', 600);
         if ($maxExec > 0) {
@@ -93,7 +94,7 @@ class PublishScheduledPosts extends Command
         foreach ($post->postTargets as $target) {
             $platform = $target->socialPlatform?->slug;
 
-            if (! in_array($platform, ['facebook', 'instagram', 'linkedin'], true)) {
+            if (! in_array($platform, ['facebook', 'instagram', 'linkedin', 'twitter'], true)) {
                 $skipped++;
                 $target->update([
                     'status' => 'skipped',
@@ -198,6 +199,31 @@ class PublishScheduledPosts extends Command
                     'error_message' => $error,
                 ]);
                 $post->li_error = $error;
+
+                continue;
+            }
+
+            if ($platform === 'twitter') {
+                $result = $xPostService->publishPost($target->socialAccount, $post, $target);
+
+                if (($result['success'] ?? false) === true) {
+                    $published++;
+                    $target->update([
+                        'status'           => 'published',
+                        'platform_post_id' => $result['post_id'] ?? null,
+                        'published_at'     => now(),
+                        'error_message'    => null,
+                    ]);
+                    $post->twitter_post_id = $result['post_id'] ?? null;
+
+                    continue;
+                }
+
+                $failed++;
+                $target->update([
+                    'status'        => 'failed',
+                    'error_message' => (string) ($result['error'] ?? 'X publish failed.'),
+                ]);
 
                 continue;
             }

@@ -12,6 +12,8 @@ use App\Policies\WorkspacePolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\TwitterProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -38,5 +40,11 @@ class AppServiceProvider extends ServiceProvider
 
         Gate::define('analytics.view', [AnalyticsPolicy::class, 'view']);
         Gate::define('analytics.export', [AnalyticsPolicy::class, 'export']);
+
+        Socialite::extend('twitteroauth2', function ($app) {
+            $config = $app['config']['services.twitteroauth2'];
+
+            return Socialite::buildProvider(TwitterProvider::class, $config);
+        });
     }
 }

@@ -16,6 +16,7 @@
             facebook: @js($postsByPlatform['facebook'] ?? []),
             instagram: @js($postsByPlatform['instagram'] ?? []),
             linkedin: @js($postsByPlatform['linkedin'] ?? []),
+            twitter: @js($postsByPlatform['twitter'] ?? []),
         },
         accounts: @js($postsByPlatform['accounts'] ?? []),
         refreshStatsUrl: @js($refreshStatsUrl),
@@ -51,6 +52,11 @@
                     class="px-4 py-2 text-sm font-medium rounded-t-lg transition-colors"
                     :class="activeTab === 'linkedin' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'">
                     💼 LinkedIn
+                </button>
+                <button type="button" @click="setTab('twitter')"
+                    class="px-4 py-2 text-sm font-medium rounded-t-lg transition-colors"
+                    :class="activeTab === 'twitter' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'">
+                    𝕏 X
                 </button>
             </div>
 
@@ -92,6 +98,20 @@
                         <select x-model="accountFilter.linkedin" class="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <option value="">All Profiles</option>
                             <template x-for="acc in accounts.linkedin" :key="acc.id">
+                                <option :value="acc.name" x-text="acc.name"></option>
+                            </template>
+                        </select>
+                    </div>
+                </template>
+                <template x-if="activeTab === 'twitter'">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div>
+                            <p class="text-sm font-semibold text-gray-900">𝕏 X</p>
+                            <p class="text-xs text-gray-500 mt-0.5">Published posts from connected X accounts</p>
+                        </div>
+                        <select x-model="accountFilter.twitter" class="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">All Accounts</option>
+                            <template x-for="acc in accounts.twitter" :key="acc.id">
                                 <option :value="acc.name" x-text="acc.name"></option>
                             </template>
                         </select>
@@ -221,6 +241,50 @@
                                 <td class="px-4 py-3.5 text-sm text-gray-600 whitespace-nowrap" x-text="post.published_at"></td>
                                 <td class="px-4 py-3.5">
                                     <button type="button" @click.stop="openDetail(post, 'instagram')" class="text-xs font-medium text-blue-600 hover:underline">👁 View</button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+
+            {{-- X (Twitter) table --}}
+            <div x-show="!showLoading && activeTab === 'twitter' && filteredPosts().length > 0" class="overflow-x-auto">
+                <table class="w-full min-w-[800px]">
+                    <thead>
+                        <tr class="border-b border-gray-100 bg-gray-50">
+                            <th class="text-left text-xs font-medium text-gray-500 px-4 py-3 uppercase tracking-wide">Post</th>
+                            <th class="text-left text-xs font-medium text-gray-500 px-4 py-3 uppercase tracking-wide">Account</th>
+                            <th class="text-left text-xs font-medium text-gray-500 px-4 py-3 uppercase tracking-wide">Status</th>
+                            <th class="text-left text-xs font-medium text-gray-500 px-4 py-3 uppercase tracking-wide">❤️ Likes</th>
+                            <th class="text-left text-xs font-medium text-gray-500 px-4 py-3 uppercase tracking-wide">💬 Replies</th>
+                            <th class="text-left text-xs font-medium text-gray-500 px-4 py-3 uppercase tracking-wide">🔁 Retweets</th>
+                            <th class="text-left text-xs font-medium text-gray-500 px-4 py-3 uppercase tracking-wide">📅 Published</th>
+                            <th class="text-left text-xs font-medium text-gray-500 px-4 py-3 uppercase tracking-wide">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="post in paginatedPosts()" :key="post.id">
+                            <tr @click="openDetail(post, 'twitter')" class="border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors">
+                                <td class="px-4 py-3.5">
+                                    <div class="flex items-center gap-3">
+                                        <template x-if="post.thumbnail">
+                                            <img :src="post.thumbnail" alt="" class="w-10 h-10 rounded-lg object-cover shrink-0" />
+                                        </template>
+                                        <template x-if="!post.thumbnail">
+                                            <div class="w-10 h-10 bg-gray-200 rounded-lg shrink-0"></div>
+                                        </template>
+                                        <span class="text-sm text-gray-800 line-clamp-2 max-w-xs" x-text="truncateCaption(post.caption)"></span>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3.5 text-sm text-gray-600" x-text="post.handle"></td>
+                                <td class="px-4 py-3.5"><span class="inline-flex text-xs font-medium px-2 py-0.5 rounded-full" :class="statusClass(post.status)" x-text="capitalize(post.status)"></span></td>
+                                <td class="px-4 py-3.5 text-sm text-gray-700" x-text="post.likes"></td>
+                                <td class="px-4 py-3.5 text-sm text-gray-700" x-text="post.comments"></td>
+                                <td class="px-4 py-3.5 text-sm text-gray-700" x-text="post.shares"></td>
+                                <td class="px-4 py-3.5 text-sm text-gray-600 whitespace-nowrap" x-text="post.published_at"></td>
+                                <td class="px-4 py-3.5">
+                                    <button type="button" @click.stop="openDetail(post, 'twitter')" class="text-xs font-medium text-blue-600 hover:underline">👁 View</button>
                                 </td>
                             </tr>
                         </template>
@@ -435,8 +499,8 @@ function socialPostsPage(config) {
         refreshing: false,
         refreshMessage: '',
         posts: config.posts,
-        accounts: config.accounts || { facebook: [], instagram: [], linkedin: [] },
-        accountFilter: { facebook: '', instagram: '', linkedin: '' },
+        accounts: config.accounts || { facebook: [], instagram: [], linkedin: [], twitter: [] },
+        accountFilter: { facebook: '', instagram: '', linkedin: '', twitter: '' },
         searchQuery: '',
         statusFilter: '',
         currentPage: 1,
@@ -456,7 +520,7 @@ function socialPostsPage(config) {
         init() {
             const params = new URLSearchParams(window.location.search);
             const platform = params.get('platform');
-            if (['facebook', 'instagram', 'linkedin'].includes(platform)) {
+            if (['facebook', 'instagram', 'linkedin', 'twitter'].includes(platform)) {
                 this.activeTab = platform;
             }
         },
@@ -475,7 +539,7 @@ function socialPostsPage(config) {
             const filterName = this.accountFilter[accountKey];
             if (filterName) {
                 list = list.filter((p) => {
-                    const name = p.page || p.account || p.profile || '';
+                    const name = p.page || p.account || p.profile || p.handle || '';
                     return name === filterName;
                 });
             }
@@ -539,6 +603,7 @@ function socialPostsPage(config) {
                     this.posts.facebook = data.posts.facebook || this.posts.facebook;
                     this.posts.instagram = data.posts.instagram || this.posts.instagram;
                     this.posts.linkedin = data.posts.linkedin || this.posts.linkedin;
+                    this.posts.twitter = data.posts.twitter || this.posts.twitter;
                 }
                 this.refreshMessage = data.message || `Synced ${data.synced || 0} post(s).`;
             } catch (e) {
@@ -619,12 +684,12 @@ function socialPostsPage(config) {
         },
 
         platformIcon(p) {
-            return { facebook: '📘', instagram: '📸', linkedin: '💼' }[p] || '🔗';
+            return { facebook: '📘', instagram: '📸', linkedin: '💼', twitter: '𝕏' }[p] || '🔗';
         },
 
         detailAccountName() {
             if (!this.selectedPost) return '';
-            return this.selectedPost.page || this.selectedPost.account || this.selectedPost.profile || '';
+            return this.selectedPost.page || this.selectedPost.account || this.selectedPost.profile || this.selectedPost.handle || '';
         },
 
         detailStat(key) {

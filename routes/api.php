@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FacebookAuthController;
 use App\Http\Controllers\Api\LinkedInAuthController;
+use App\Http\Controllers\Api\XAuthController;
 use App\Http\Controllers\FacebookDataDeletionController;
 use App\Http\Controllers\Api\PostController;
 use App\Http\Controllers\Api\SocialAccountController;
@@ -26,6 +27,8 @@ Route::middleware(['web', 'throttle:20,1'])->group(function () {
     Route::get('/auth/facebook/callback', [FacebookAuthController::class, 'handleCallback']);
     Route::get('/auth/linkedin/redirect', [LinkedInAuthController::class, 'redirectToLinkedIn'])->name('api.auth.linkedin.redirect');
     Route::get('/auth/linkedin/callback', [LinkedInAuthController::class, 'handleCallback']);
+    Route::get('/auth/twitter/redirect', [XAuthController::class, 'redirectToX'])->name('api.auth.twitter.redirect');
+    Route::get('/auth/twitter/callback', [XAuthController::class, 'handleCallback']);
 });
 
 Route::middleware(['web', 'auth', 'workspace.context', 'throttle:60,1'])->group(function () {

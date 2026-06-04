@@ -35,8 +35,7 @@
                 ['path' => '/social-posts?platform=facebook', 'match' => 'social-posts*', 'label' => 'Facebook', 'icon' => 'facebook', 'platform' => 'facebook'],
                 ['path' => '/social-posts?platform=instagram', 'match' => 'social-posts*', 'label' => 'Instagram', 'icon' => 'instagram', 'platform' => 'instagram'],
                 ['path' => '/social-posts?platform=linkedin', 'match' => 'social-posts*', 'label' => 'LinkedIn', 'icon' => 'linkedin', 'platform' => 'linkedin'],
-                // Future platforms (uncomment when ready):
-                // ['path' => '/social-posts?platform=twitter', 'match' => 'social-posts*', 'label' => 'X (Twitter)', 'icon' => 'twitter', 'platform' => 'twitter'],
+                ['path' => '/social-posts?platform=twitter', 'match' => 'social-posts*', 'label' => 'X', 'icon' => 'twitter', 'platform' => 'twitter'],
                 // ['path' => '/social-posts?platform=telegram', 'match' => 'social-posts*', 'label' => 'Telegram', 'icon' => 'telegram', 'platform' => 'telegram'],
                 // ['path' => '/social-posts?platform=reddit', 'match' => 'social-posts*', 'label' => 'Reddit', 'icon' => 'reddit', 'platform' => 'reddit'],
             ],
@@ -187,7 +186,13 @@
                                     'reddit' => 'bg-orange-500',
                                 ];
                                 $dotColor = $platformColors[$child['platform']] ?? 'bg-gray-400';
-                                $platformInitials = strtoupper(substr($child['label'], 0, 2));
+                                $platformInitials = match ($child['platform'] ?? '') {
+                                    'facebook' => 'FA',
+                                    'instagram' => 'IN',
+                                    'linkedin' => 'LI',
+                                    'twitter' => 'X',
+                                    default => strtoupper(substr($child['label'], 0, 2)),
+                                };
                             @endphp
                             <span class="w-5 h-5 rounded {{ $dotColor }} flex items-center justify-center text-white text-[9px] font-bold shrink-0">
                                 {{ $platformInitials }}

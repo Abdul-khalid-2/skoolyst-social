@@ -104,6 +104,19 @@ return [
     ],
 
 
+    'twitter' => [
+        'client_id' => env('TWITTER_CLIENT_ID'),
+        'client_secret' => env('TWITTER_CLIENT_SECRET'),
+        'redirect' => env('TWITTER_REDIRECT_URI', rtrim((string) env('APP_URL', 'http://localhost'), '/').'/api/auth/twitter/callback'),
+        'oauth' => 2,
+    ],
+
+    'twitteroauth2' => [
+        'client_id' => env('TWITTER_CLIENT_ID'),
+        'client_secret' => env('TWITTER_CLIENT_SECRET'),
+        'redirect' => env('TWITTER_REDIRECT_URI', rtrim((string) env('APP_URL', 'http://localhost'), '/').'/api/auth/twitter/callback'),
+    ],
+
     'linkedin' => [
         'client_id' => env('LINKEDIN_CLIENT_ID'),
         'client_secret' => env('LINKEDIN_CLIENT_SECRET'),

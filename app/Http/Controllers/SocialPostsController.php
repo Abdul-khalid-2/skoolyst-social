@@ -24,13 +24,13 @@ class SocialPostsController extends Controller
         $workspaceId = $this->dashboardService->resolveWorkspaceId($user);
         $workspace = $workspaceId ? Workspace::query()->find($workspaceId) : null;
 
-        $initialPlatform = in_array($request->query('platform'), ['facebook', 'instagram', 'linkedin'], true)
+        $initialPlatform = in_array($request->query('platform'), ['facebook', 'instagram', 'linkedin', 'twitter'], true)
             ? $request->query('platform')
             : 'facebook';
 
         $postsByPlatform = $workspaceId
             ? $this->listingService->listByPlatform($workspaceId)
-            : ['facebook' => [], 'instagram' => [], 'linkedin' => [], 'accounts' => []];
+            : ['facebook' => [], 'instagram' => [], 'linkedin' => [], 'twitter' => [], 'accounts' => []];
 
         return view('social-posts.index', [
             'title' => 'Social Posts',
@@ -51,7 +51,7 @@ class SocialPostsController extends Controller
         }
 
         $platform = $request->input('platform');
-        if ($platform !== null && ! in_array($platform, ['facebook', 'instagram', 'linkedin'], true)) {
+        if ($platform !== null && ! in_array($platform, ['facebook', 'instagram', 'linkedin', 'twitter'], true)) {
             return response()->json(['message' => 'Invalid platform.'], 422);
         }
 
@@ -91,9 +91,10 @@ class SocialPostsController extends Controller
             'message' => $message,
             'errors' => $result['errors'],
             'posts' => [
-                'facebook' => $postsByPlatform['facebook'],
+                'facebook'  => $postsByPlatform['facebook'],
                 'instagram' => $postsByPlatform['instagram'],
-                'linkedin' => $postsByPlatform['linkedin'],
+                'linkedin'  => $postsByPlatform['linkedin'],
+                'twitter'   => $postsByPlatform['twitter'],
             ],
         ]);
     }

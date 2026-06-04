@@ -13,6 +13,7 @@ class SocialPostListingService
      *   facebook: array<int, array<string, mixed>>,
      *   instagram: array<int, array<string, mixed>>,
      *   linkedin: array<int, array<string, mixed>>,
+     *   twitter: array<int, array<string, mixed>>,
      *   accounts: array<string, array<int, array{id: int, name: string}>>
      * }
      */
@@ -32,6 +33,7 @@ class SocialPostListingService
         $facebook = [];
         $instagram = [];
         $linkedin = [];
+        $twitter = [];
 
         foreach ($targets as $target) {
             $row = $this->transformTarget($target);
@@ -41,6 +43,7 @@ class SocialPostListingService
                 'facebook' => $facebook[] = $row,
                 'instagram' => $instagram[] = $row,
                 'linkedin' => $linkedin[] = $row,
+                'twitter' => $twitter[] = $row,
                 default => null,
             };
         }
@@ -48,10 +51,11 @@ class SocialPostListingService
         $accounts = $this->connectedAccountsByPlatform($workspaceId);
 
         return [
-            'facebook' => $facebook,
+            'facebook'  => $facebook,
             'instagram' => $instagram,
-            'linkedin' => $linkedin,
-            'accounts' => $accounts,
+            'linkedin'  => $linkedin,
+            'twitter'   => $twitter,
+            'accounts'  => $accounts,
         ];
     }
 
@@ -95,6 +99,8 @@ class SocialPostListingService
             $base['type'] = $this->instagramMediaLabel($mediaType);
         } elseif ($slug === 'linkedin') {
             $base['profile'] = $accountName;
+        } elseif ($slug === 'twitter') {
+            $base['handle'] = $accountName;
         }
 
         return $base;
@@ -149,9 +155,10 @@ class SocialPostListingService
             ->get();
 
         $grouped = [
-            'facebook' => [],
+            'facebook'  => [],
             'instagram' => [],
-            'linkedin' => [],
+            'linkedin'  => [],
+            'twitter'   => [],
         ];
 
         foreach ($accounts as $account) {

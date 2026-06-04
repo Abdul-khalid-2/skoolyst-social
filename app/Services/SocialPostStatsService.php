@@ -45,6 +45,7 @@ class SocialPostStatsService
             'facebook' => $this->fetchFacebookStats($platformPostId, $token),
             'instagram' => $this->fetchInstagramStats($platformPostId, $token),
             'linkedin' => $this->fetchLinkedInStats($platformPostId, $token),
+            'twitter' => $this->fetchXStats($platformPostId, $token),
             default => ['success' => false, 'error' => "Unsupported platform: {$slug}"],
         };
     }
@@ -73,6 +74,7 @@ class SocialPostStatsService
             'facebook' => $this->fetchFacebookComments($platformPostId, $token, $limit),
             'instagram' => $this->fetchInstagramComments($platformPostId, $token, $limit),
             'linkedin' => ['success' => true, 'comments' => []],
+            'twitter' => $this->fetchXComments($platformPostId, $token, $limit),
             default => ['success' => false, 'error' => "Unsupported platform: {$slug}"],
         };
     }
@@ -342,6 +344,11 @@ class SocialPostStatsService
                     'X-Restli-Protocol-Version' => '2.0.0',
                 ],
             ],
+            'twitter' => [
+                'url'     => 'https://api.twitter.com/2/tweets/'.$platformPostId,
+                'query'   => ['tweet.fields' => 'public_metrics'],
+                'headers' => ['Authorization' => 'Bearer '.$token],
+            ],
             default => null,
         };
     }
@@ -378,6 +385,14 @@ class SocialPostStatsService
                 'likes' => (int) ($data['reactionSummaries'][0]['count'] ?? $data['reactionSummary']['count'] ?? 0),
                 'comments' => (int) ($data['commentSummary']['count'] ?? $data['commentsSummary']['count'] ?? 0),
                 'shares' => 0,
+            ],
+            'twitter' => [
+                'success'   => true,
+                'likes'     => (int) ($data['data']['public_metrics']['like_count'] ?? 0),
+                'comments'  => (int) ($data['data']['public_metrics']['reply_count'] ?? 0),
+                'shares'    => (int) ($data['data']['public_metrics']['retweet_count'] ?? 0),
+                'reactions' => (int) (($data['data']['public_metrics']['like_count'] ?? 0)
+                                    + ($data['data']['public_metrics']['bookmark_count'] ?? 0)),
             ],
             default => ['success' => false, 'error' => 'Unsupported platform.'],
         };
@@ -593,5 +608,21 @@ class SocialPostStatsService
         } catch (Throwable) {
             return $value;
         }
+    }
+
+    /**
+     * @return array{success: bool, likes?: ?int, comments?: ?int, shares?: ?int, reactions?: ?int, error?: string}
+     */
+    private function fetchXStats(string $tweetId, string $token): array
+    {
+        return app(\App\Services\XPostService::class)->fetchTweetStats($tweetId, $token);
+    }
+
+    /**
+     * @return array{success: bool, comments?: array<int, array<string, mixed>>, error?: string}
+     */
+    private function fetchXComments(string $tweetId, string $token, int $limit = 10): array
+    {
+        return app(\App\Services\XPostService::class)->fetchReplies($tweetId, $token, $limit);
     }
 }

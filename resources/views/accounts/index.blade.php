@@ -257,7 +257,7 @@
             </div>
 
             @foreach ($rows as $row)
-                @if (in_array($row->platform->slug, ['facebook', 'instagram', 'linkedin'], true))
+                @if (in_array($row->platform->slug, ['facebook', 'instagram', 'linkedin', 'twitter'], true))
                     @php
                         $platform = $row->platform;
                         $g = $accountsHelper->gradientFor($platform);
@@ -292,7 +292,10 @@
                             <p class="text-center text-sm text-gray-600 mb-6">
                                 @if ($platform->slug === 'instagram')
                                     {{ __('Instagram Business accounts are linked through Meta. You’ll continue with Facebook login — approve Pages — and any Instagram Professional accounts linked to those Pages will appear here.') }}                                @elseif ($platform->slug === 'linkedin')
-                                    {{ __('You will be redirected to LinkedIn to authorize Skoolyst Social AI to post on your behalf. Personal profile and organization pages you administer will be available for publishing.') }}                                @else
+                                    {{ __('You will be redirected to LinkedIn to authorize Skoolyst Social AI to post on your behalf. Personal profile and organization pages you administer will be available for publishing.') }}
+                                @elseif ($platform->slug === 'twitter')
+                                    {{ __('You will be redirected to X to authorize Skoolyst Social AI to post on your behalf.') }}
+                                @else
                                     {{ __('You will be redirected to :name to authorize Skoolyst Social AI to post on your behalf.', ['name' => $platform->name]) }}
                                 @endif
                             </p>
@@ -305,12 +308,14 @@
                                 >
                                     {{ __('Cancel') }}
                                 </button>
-                                @if (in_array($platform->slug, ['facebook', 'instagram', 'linkedin'], true))
+                                @if (in_array($platform->slug, ['facebook', 'instagram', 'linkedin', 'twitter'], true))
                                     {{-- Instagram Business uses the same Meta Facebook Login flow; IG accounts are linked after Pages are authorized. --}}
                                     <a
                                         href="
                                             @if ($platform->slug === 'linkedin')
                                                 {{ route('api.auth.linkedin.redirect') }}
+                                            @elseif ($platform->slug === 'twitter')
+                                                {{ route('api.auth.twitter.redirect') }}
                                             @else
                                                 {{ route('api.auth.facebook.redirect') }}
                                             @endif
