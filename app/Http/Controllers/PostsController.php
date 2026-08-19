@@ -12,9 +12,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
-use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class PostsController extends Controller
@@ -107,7 +105,7 @@ class PostsController extends Controller
             ])->values()->all(),
         ];
 
-        $workspaceSlug = Str::slug((string) $workspace->name) ?: 'workspace';
+        $workspaceSlug = \Illuminate\Support\Str::slug((string) $workspace->name) ?: 'workspace';
         $filename = sprintf('skoolyst-posts-%s-%s.json', $workspaceSlug, $exportedAt->format('Y-m-d-His'));
 
         return response()
@@ -400,8 +398,8 @@ class PostsController extends Controller
         $path = strtolower((string) parse_url($url, PHP_URL_PATH));
 
         return match (true) {
-            Str::endsWith($path, ['.mp4', '.mov', '.webm']) => 'video',
-            Str::endsWith($path, ['.gif']) => 'gif',
+            \Illuminate\Support\Str::endsWith($path, ['.mp4', '.mov', '.webm']) => 'video',
+            \Illuminate\Support\Str::endsWith($path, ['.gif']) => 'gif',
             default => 'image',
         };
     }
