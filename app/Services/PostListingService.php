@@ -105,6 +105,21 @@ class PostListingService
         ];
     }
 
+    /**
+     * @return Collection<int, Post>
+     */
+    public function allForExport(User $user): Collection
+    {
+        $workspace = $this->resolveWorkspaceForUser($user);
+        if ($workspace === null) {
+            return collect();
+        }
+
+        return $this->basePostQuery((int) $workspace->id)
+            ->oldest('created_at')
+            ->get();
+    }
+
     public function deleteForUser(User $user, Post $post): void
     {
         Gate::forUser($user)->authorize('delete', $post);
