@@ -37,6 +37,8 @@ Route::middleware(['auth', 'workspace.context'])->group(function (): void {
     Route::get('create', [CreatePostController::class, 'index'])->name('create');
     Route::get('posts', [PostsController::class, 'index'])->name('posts.index');
     Route::get('posts/export', [PostsController::class, 'export'])->name('posts.export');
+    Route::get('posts/import-template', [PostsController::class, 'importTemplate'])->name('posts.import-template');
+    Route::post('posts/import', [PostsController::class, 'import'])->name('posts.import');
     Route::get('social-posts', [SocialPostsController::class, 'index'])->name('social-posts.index');
     Route::post('social-posts/refresh-stats', [SocialPostsController::class, 'refreshStats'])->name('social-posts.refresh-stats');
     Route::get('social-posts/targets/{target}/comments', [SocialPostsController::class, 'comments'])

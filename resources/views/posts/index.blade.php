@@ -66,15 +66,38 @@
                     <div class="text-xs text-gray-500">
                         Workspace: <span class="font-medium text-gray-700">{{ $workspace->name }}</span>
                     </div>
-                    <a
-                        href="{{ route('posts.export') }}"
-                        class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-                    >
-                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-                        </svg>
-                        {{ __('Export JSON') }}
-                    </a>
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <a
+                            href="{{ route('posts.import-template') }}"
+                            class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                        >
+                            {{ __('Download Template') }}
+                        </a>
+                        <form action="{{ route('posts.import') }}" method="post" enctype="multipart/form-data" class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                            @csrf
+                            <label class="sr-only" for="posts_file">{{ __('Import posts JSON') }}</label>
+                            <input
+                                id="posts_file"
+                                name="posts_file"
+                                type="file"
+                                accept="application/json,.json"
+                                required
+                                class="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-gray-700 hover:file:bg-gray-200"
+                            >
+                            <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700">
+                                {{ __('Import JSON') }}
+                            </button>
+                        </form>
+                        <a
+                            href="{{ route('posts.export') }}"
+                            class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                        >
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                            </svg>
+                            {{ __('Export JSON') }}
+                        </a>
+                    </div>
                 </div>
 
                 <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
